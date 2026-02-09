@@ -188,6 +188,31 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Memory Service
+  memory-service:
+    build:
+      context: .
+      dockerfile: services/memory-service/Dockerfile
+    container_name: cognitionos-memory-service
+    environment:
+      - PORT=8004
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - REDIS_URL=redis://redis:6379/0
+      - VECTOR_DIMENSION=1536
+      - EMBEDDING_MODEL=text-embedding-ada-002
+      - MAX_MEMORIES_PER_USER=10000
+      - DEFAULT_RETRIEVAL_K=5
+      - LOG_LEVEL=INFO
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   # Tool Runner
   tool-runner:
     build:
