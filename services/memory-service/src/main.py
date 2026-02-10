@@ -37,6 +37,9 @@ from database import (
     Memory as DBMemory
 )
 
+# Import AI Runtime client for embeddings
+from ai_runtime_client import AIRuntimeClient
+
 
 # Configuration
 config = load_config(MemoryServiceConfig)
@@ -118,6 +121,8 @@ class MemoryStore:
 
     def __init__(self):
         self.logger = get_contextual_logger(__name__, component="MemoryStore")
+        # Initialize AI Runtime client for embeddings
+        self.ai_client = AIRuntimeClient()
 
     async def store(
         self,
@@ -157,9 +162,17 @@ class MemoryStore:
             }
         )
 
-        # Generate embedding (simulated for now)
-        # In production: embedding = await openai.Embedding.create(input=content)
-        embedding = self._generate_embedding(content)
+        # Generate embedding using AI Runtime
+        try:
+            embeddings = await self.ai_client.generate_embeddings(
+                texts=[content],
+                user_id=user_id
+            )
+            embedding = embeddings[0] if embeddings else None
+        except Exception as e:
+            self.logger.warning(f"Failed to generate embedding via AI Runtime: {e}")
+            # Fallback to simulated embedding
+            embedding = self._generate_embedding(content)
 
         # Extract entities and keywords
         entities = self._extract_entities(content)
@@ -233,8 +246,16 @@ class MemoryStore:
             }
         )
 
-        # Generate query embedding
-        query_embedding = self._generate_embedding(query)
+        # Generate query embedding using AI Runtime
+        try:
+            embeddings = await self.ai_client.generate_embeddings(
+                texts=[query],
+                user_id=user_id
+            )
+            query_embedding = embeddings[0] if embeddings else None
+        except Exception as e:
+            self.logger.warning(f"Failed to generate query embedding: {e}")
+            query_embedding = self._generate_embedding(query)
 
         # Build query filters
         filters = [
@@ -327,8 +348,16 @@ class MemoryStore:
         if not memory:
             raise ValueError(f"Memory not found: {memory_id}")
 
-        # Generate new embedding
-        new_embedding = self._generate_embedding(new_content)
+        # Generate new embedding using AI Runtime
+        try:
+            embeddings = await self.ai_client.generate_embeddings(
+                texts=[new_content],
+                user_id=memory.user_id
+            )
+            new_embedding = embeddings[0] if embeddings else None
+        except Exception as e:
+            self.logger.warning(f"Failed to generate embedding: {e}")
+            new_embedding = self._generate_embedding(new_content)
 
         # Update memory
         memory.content = new_content
