@@ -175,6 +175,10 @@ class AIRuntimeConfig(BaseConfig):
     cache_enabled: bool = Field(default=True, env="CACHE_ENABLED")
     cache_ttl_seconds: int = Field(default=3600, env="CACHE_TTL_SECONDS")
 
+    # Validation
+    strict_validation: bool = Field(default=False, env="STRICT_VALIDATION")
+    enable_hallucination_detection: bool = Field(default=True, env="ENABLE_HALLUCINATION_DETECTION")
+
 
 class MemoryServiceConfig(BaseConfig):
     """Configuration for Memory Service."""

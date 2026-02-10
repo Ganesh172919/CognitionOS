@@ -29,6 +29,9 @@ from shared.libs.middleware import (
     ErrorHandlingMiddleware
 )
 
+# Import audit client
+from audit_client import AuditClient
+
 
 # Configuration
 config = load_config(ToolRunnerConfig)
@@ -127,27 +130,33 @@ class SandboxExecutor:
 
     Uses Docker for isolation in production.
     Falls back to subprocess for local development.
+    Integrates with audit-log service for comprehensive logging.
     """
 
     def __init__(self):
         self.logger = get_contextual_logger(__name__, component="SandboxExecutor")
         self.use_docker = config.sandbox_enabled
+        self.audit_client = AuditClient()
 
     async def execute(
         self,
         tool_name: str,
         parameters: Dict[str, Any],
         timeout: int,
-        permissions: List[str]
+        permissions: List[str],
+        user_id: UUID,
+        agent_id: UUID
     ) -> ToolExecutionResult:
         """
-        Execute a tool in sandbox.
+        Execute a tool in sandbox with audit logging.
 
         Args:
             tool_name: Name of tool to execute
             parameters: Tool parameters
             timeout: Execution timeout
             permissions: User permissions
+            user_id: User ID for audit
+            agent_id: Agent ID for audit
 
         Returns:
             Execution result
@@ -172,6 +181,15 @@ class SandboxExecutor:
 
             required_perms = tool_def["required_permissions"]
             if not all(perm in permissions for perm in required_perms):
+                # Log permission denied to audit
+                await self.audit_client.log_permission_denied(
+                    tool_name=tool_name,
+                    user_id=user_id,
+                    agent_id=agent_id,
+                    required_permissions=required_perms,
+                    granted_permissions=permissions
+                )
+
                 raise PermissionError(
                     f"Missing permissions: {set(required_perms) - set(permissions)}"
                 )
@@ -193,11 +211,28 @@ class SandboxExecutor:
                 result = {"error": f"Tool not implemented: {tool_name}"}
 
             duration = (datetime.utcnow() - start_time).total_seconds()
+            duration_ms = int(duration * 1000)
+
+            success = "error" not in result
+
+            # Log to audit service
+            await self.audit_client.log_tool_execution(
+                tool_name=tool_name,
+                user_id=user_id,
+                agent_id=agent_id,
+                parameters=parameters,
+                permissions=required_perms,
+                outcome="success" if success else "failure",
+                success=success,
+                duration_ms=duration_ms,
+                error=result.get("error"),
+                output=result.get("output")
+            )
 
             return ToolExecutionResult(
                 execution_id=execution_id,
                 tool_name=tool_name,
-                success="error" not in result,
+                success=success,
                 output=result.get("output"),
                 error=result.get("error"),
                 duration_seconds=duration,
@@ -218,6 +253,21 @@ class SandboxExecutor:
         except Exception as e:
             self.logger.error("Execution failed", extra={"error": str(e)})
             duration = (datetime.utcnow() - start_time).total_seconds()
+            duration_ms = int(duration * 1000)
+
+            # Log failure to audit
+            await self.audit_client.log_tool_execution(
+                tool_name=tool_name,
+                user_id=user_id,
+                agent_id=agent_id,
+                parameters=parameters,
+                permissions=permissions,
+                outcome="error",
+                success=False,
+                duration_ms=duration_ms,
+                error=str(e)
+            )
+
             return ToolExecutionResult(
                 execution_id=execution_id,
                 tool_name=tool_name,
@@ -369,12 +419,14 @@ async def execute_tool(request: ToolExecutionRequest):
     timeout = request.timeout_seconds or tool_def["timeout"]
     timeout = min(timeout, config.max_tool_timeout)  # Enforce max timeout
 
-    # Execute
+    # Execute with audit logging
     result = await executor.execute(
         tool_name=request.tool_name,
         parameters=request.parameters,
         timeout=timeout,
-        permissions=request.permissions
+        permissions=request.permissions,
+        user_id=request.user_id,
+        agent_id=request.agent_id
     )
 
     log.info(

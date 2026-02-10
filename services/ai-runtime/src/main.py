@@ -34,6 +34,10 @@ from database import get_db, LLMUsage
 # Import LLM integrations
 from llm_integrations import OpenAIIntegration, AnthropicIntegration
 
+# Import validation and prompt management
+from output_validator import OutputValidator, ResponseQualityScorer, ValidationResult
+from prompt_manager import PromptManager, PromptTemplate
+
 
 # Configuration
 config = load_config(AIRuntimeConfig)
@@ -79,6 +83,11 @@ class CompletionResponse(BaseModel):
     latency_ms: int
     finish_reason: str
     cached: bool = False
+    # Validation and quality metrics
+    validation: Optional[Dict] = None
+    quality_scores: Optional[Dict[str, float]] = None
+    template_id: Optional[str] = None
+    prompt_version: Optional[str] = None
 
 
 class EmbeddingRequest(BaseModel):
@@ -220,6 +229,7 @@ class ModelRouter:
 class LLMClient:
     """
     Client for calling LLM APIs with fallback and error handling.
+    Includes output validation and prompt management.
     """
 
     def __init__(self, router: ModelRouter):
@@ -229,6 +239,11 @@ class LLMClient:
         # Initialize integrations
         self.openai_client = None
         self.anthropic_client = None
+
+        # Initialize validation and prompt management
+        self.validator = OutputValidator(strict_mode=config.strict_validation)
+        self.quality_scorer = ResponseQualityScorer()
+        self.prompt_manager = PromptManager()
 
         # Try to initialize OpenAI
         if config.openai_api_key:
@@ -315,6 +330,32 @@ class LLMClient:
             result["completion_tokens"]
         )
 
+        # Validate output
+        validation_result = self.validator.validate(
+            output=result["content"],
+            prompt=prompt,
+            context=context,
+            role=role.value
+        )
+
+        # Calculate quality scores
+        quality_scores = self.quality_scorer.score(
+            output=result["content"],
+            prompt=prompt,
+            validation_result=validation_result
+        )
+
+        # Log validation issues if any
+        if not validation_result.is_valid:
+            self.logger.warning(
+                "Output validation failed",
+                extra={
+                    "quality_score": validation_result.quality_score,
+                    "issue_count": len(validation_result.issues),
+                    "hallucination_detected": validation_result.hallucination_detected
+                }
+            )
+
         # Track usage in database if available
         if db and user_id:
             try:
@@ -342,7 +383,23 @@ class LLMClient:
             cost_usd=cost,
             latency_ms=latency_ms,
             finish_reason=result["finish_reason"],
-            cached=False
+            cached=False,
+            validation={
+                "is_valid": validation_result.is_valid,
+                "quality_score": validation_result.quality_score,
+                "confidence_score": validation_result.confidence_score,
+                "hallucination_detected": validation_result.hallucination_detected,
+                "issue_count": len(validation_result.issues),
+                "issues": [
+                    {
+                        "severity": issue.severity.value,
+                        "type": issue.issue_type,
+                        "message": issue.message
+                    }
+                    for issue in validation_result.issues[:5]  # Limit to top 5 issues
+                ]
+            },
+            quality_scores=quality_scores
         )
 
     async def _call_provider(
