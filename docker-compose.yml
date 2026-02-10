@@ -1,0 +1,253 @@
+version: '3.8'
+
+services:
+  # Infrastructure Services
+  postgres:
+    image: postgres:15-alpine
+    container_name: cognitionos-postgres
+    environment:
+      POSTGRES_DB: cognitionos
+      POSTGRES_USER: cognition
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_INITDB_ARGS: "-c shared_buffers=256MB -c max_connections=200"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognition"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: cognitionos-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: cognitionos-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # CognitionOS Services
+  # Note: In production, build these from Dockerfiles
+  # For now, these are placeholders showing the architecture
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: cognitionos-api-gateway
+    environment:
+      - PORT=8000
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - REDIS_URL=redis://redis:6379/0
+      - MESSAGE_QUEUE_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - LOG_LEVEL=INFO
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - TASK_SERVICE_URL=http://task-planner:8002
+      - AGENT_SERVICE_URL=http://agent-orchestrator:8003
+      - RATE_LIMIT_PER_MINUTE=60
+      - CIRCUIT_BREAKER_THRESHOLD=5
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    # Uncomment when Dockerfile is created:
+    # command: python src/main.py
+
+  # Auth Service
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    container_name: cognitionos-auth
+    environment:
+      - PORT=8001
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+      - BCRYPT_ROUNDS=12
+      - LOG_LEVEL=INFO
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Task Planner
+  task-planner:
+    build:
+      context: .
+      dockerfile: services/task-planner/Dockerfile
+    container_name: cognitionos-task-planner
+    environment:
+      - PORT=8002
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - REDIS_URL=redis://redis:6379/0
+      - AI_RUNTIME_URL=http://ai-runtime:8005
+      - LOG_LEVEL=INFO
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Agent Orchestrator
+  agent-orchestrator:
+    build:
+      context: .
+      dockerfile: services/agent-orchestrator/Dockerfile
+    container_name: cognitionos-agent-orchestrator
+    environment:
+      - PORT=8003
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - REDIS_URL=redis://redis:6379/0
+      - MESSAGE_QUEUE_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+      - MAX_AGENTS=100
+      - AGENT_TIMEOUT_SECONDS=300
+      - MAX_RETRIES=3
+      - LOG_LEVEL=INFO
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # AI Runtime
+  ai-runtime:
+    build:
+      context: .
+      dockerfile: services/ai-runtime/Dockerfile
+    container_name: cognitionos-ai-runtime
+    environment:
+      - PORT=8005
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEFAULT_PLANNER_MODEL=gpt-4
+      - DEFAULT_EXECUTOR_MODEL=gpt-3.5-turbo
+      - DEFAULT_CRITIC_MODEL=gpt-4
+      - CACHE_ENABLED=true
+      - LOG_LEVEL=INFO
+    ports:
+      - "8005:8005"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Memory Service
+  memory-service:
+    build:
+      context: .
+      dockerfile: services/memory-service/Dockerfile
+    container_name: cognitionos-memory-service
+    environment:
+      - PORT=8004
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - REDIS_URL=redis://redis:6379/0
+      - VECTOR_DIMENSION=1536
+      - EMBEDDING_MODEL=text-embedding-ada-002
+      - MAX_MEMORIES_PER_USER=10000
+      - DEFAULT_RETRIEVAL_K=5
+      - LOG_LEVEL=INFO
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Tool Runner
+  tool-runner:
+    build:
+      context: .
+      dockerfile: services/tool-runner/Dockerfile
+    container_name: cognitionos-tool-runner
+    environment:
+      - PORT=8006
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://cognition:${DB_PASSWORD:-changeme}@postgres:5432/cognitionos
+      - SANDBOX_ENABLED=true
+      - SANDBOX_NETWORK_ENABLED=false
+      - SANDBOX_MEMORY_LIMIT=512m
+      - SANDBOX_CPU_LIMIT=1.0
+      - DEFAULT_TOOL_TIMEOUT=30
+      - MAX_CONCURRENT_EXECUTIONS=10
+      - LOG_LEVEL=INFO
+    ports:
+      - "8006:8006"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # For Docker-in-Docker sandboxing
+    privileged: true  # Required for Docker operations
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  default:
+    name: cognitionos-network
+    driver: bridge
