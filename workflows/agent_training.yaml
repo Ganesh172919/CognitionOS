@@ -1,0 +1,163 @@
+workflow:
+  id: "agent-training-pipeline"
+  version: "1.0.0"
+  name: "Agent Training Pipeline"
+  description: "Train agents on historical executions to improve performance"
+
+  inputs:
+    - name: agent_role
+      type: enum
+      values: [planner, executor, critic, summarizer]
+      required: true
+      description: "Agent role to train"
+
+    - name: sample_size
+      type: integer
+      default: 1000
+      description: "Number of historical executions to analyze"
+
+    - name: ab_test_duration_hours
+      type: integer
+      default: 24
+      description: "Duration of A/B test in hours"
+
+  outputs:
+    - name: new_prompt_version
+      type: string
+      description: "Version of the new prompt"
+
+    - name: performance_improvement
+      type: float
+      description: "Percentage improvement in performance"
+
+  steps:
+    - id: collect_executions
+      name: "Collect Historical Executions"
+      type: query_database
+      params:
+        query: >
+          SELECT * FROM task_execution_logs
+          WHERE agent_role = '${{ inputs.agent_role }}'
+          AND status = 'completed'
+          ORDER BY created_at DESC
+          LIMIT ${{ inputs.sample_size }}
+      agent_role: executor
+      timeout: 300s
+
+    - id: analyze_patterns
+      name: "Analyze Successful Patterns"
+      type: execute_python
+      depends_on: [collect_executions]
+      params:
+        script: |
+          # Analyze execution logs to find patterns
+          executions = ${{ steps.collect_executions.output.rows }}
+
+          # Calculate metrics
+          avg_quality = sum(e['quality_score'] for e in executions) / len(executions)
+          avg_confidence = sum(e['confidence'] for e in executions) / len(executions)
+
+          # Identify common patterns in successful executions
+          successful_patterns = []
+          for e in executions:
+              if e['quality_score'] > 0.8:
+                  successful_patterns.append(e['prompt_variation'])
+      agent_role: planner
+      timeout: 600s
+
+    - id: generate_prompt_variations
+      name: "Generate Improved Prompt Variations"
+      type: ai_generate
+      depends_on: [analyze_patterns]
+      params:
+        prompt: |
+          Based on these successful execution patterns:
+          ${{ steps.analyze_patterns.output.successful_patterns }}
+
+          Generate 5 improved prompt variations for the ${{ inputs.agent_role }} agent
+          that incorporate the best patterns while maintaining clarity and effectiveness.
+      agent_role: planner
+      timeout: 300s
+
+    - id: create_ab_test
+      name: "Create A/B Test"
+      type: http_request
+      depends_on: [generate_prompt_variations]
+      params:
+        url: http://ai-runtime:8005/prompts/ab-test
+        method: POST
+        body:
+          role: ${{ inputs.agent_role }}
+          variations: ${{ steps.generate_prompt_variations.output.variations }}
+          traffic_split: [0.7, 0.1, 0.1, 0.05, 0.05]  # 70% control, 30% new
+          duration_hours: ${{ inputs.ab_test_duration_hours }}
+      agent_role: executor
+      timeout: 60s
+
+    - id: wait_for_test
+      name: "Wait for A/B Test to Complete"
+      type: execute_python
+      depends_on: [create_ab_test]
+      params:
+        script: |
+          import time
+          time.sleep(${{ inputs.ab_test_duration_hours }} * 3600)
+      agent_role: executor
+      timeout: ${{ inputs.ab_test_duration_hours * 3600 + 60 }}s
+
+    - id: evaluate_test_results
+      name: "Evaluate A/B Test Results"
+      type: http_request
+      depends_on: [wait_for_test]
+      params:
+        url: http://ai-runtime:8005/prompts/ab-test/${{ steps.create_ab_test.output.test_id }}/results
+        method: GET
+      agent_role: executor
+      timeout: 60s
+
+    - id: select_winner
+      name: "Select Winning Prompt"
+      type: execute_python
+      depends_on: [evaluate_test_results]
+      params:
+        script: |
+          results = ${{ steps.evaluate_test_results.output.results }}
+
+          # Find variation with highest quality score
+          winner = max(results, key=lambda x: x['quality_score'])
+
+          # Calculate improvement over control
+          control_score = results[0]['quality_score']
+          winner_score = winner['quality_score']
+          improvement = ((winner_score - control_score) / control_score) * 100
+      agent_role: executor
+      timeout: 60s
+
+    - id: promote_winner
+      name: "Promote Winning Prompt to Production"
+      type: http_request
+      depends_on: [select_winner]
+      params:
+        url: http://ai-runtime:8005/prompts/promote
+        method: POST
+        body:
+          role: ${{ inputs.agent_role }}
+          prompt_id: ${{ steps.select_winner.output.winner.id }}
+          reason: "A/B test showed ${{ steps.select_winner.output.improvement }}% improvement"
+      agent_role: executor
+      timeout: 60s
+      condition: ${{ steps.select_winner.output.improvement }} > 5.0
+
+    - id: send_report
+      name: "Send Training Report"
+      type: send_alert
+      depends_on: [promote_winner]
+      params:
+        severity: info
+        message: >
+          Agent Training Complete for ${{ inputs.agent_role }}:
+          - Analyzed: ${{ inputs.sample_size }} executions
+          - Improvement: ${{ steps.select_winner.output.improvement }}%
+          - New Version: ${{ steps.promote_winner.output.version }}
+      agent_role: executor
+      timeout: 30s

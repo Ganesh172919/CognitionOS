@@ -1,0 +1,118 @@
+workflow:
+  id: "deploy-web-app"
+  version: "1.0.0"
+  name: "Deploy Web Application"
+  description: "Deploy a web application with testing and validation"
+
+  inputs:
+    - name: repo_url
+      type: string
+      required: true
+      description: "Git repository URL to deploy"
+
+    - name: environment
+      type: enum
+      values: [dev, staging, prod]
+      default: dev
+      description: "Target deployment environment"
+
+    - name: run_tests
+      type: boolean
+      default: true
+      description: "Whether to run tests before deployment"
+
+  outputs:
+    - name: deployment_url
+      type: string
+      description: "URL of the deployed application"
+
+    - name: deployment_status
+      type: enum
+      values: [success, partial, failed]
+      description: "Final deployment status"
+
+  steps:
+    - id: clone_repo
+      name: "Clone Repository"
+      type: git_clone
+      params:
+        url: ${{ inputs.repo_url }}
+        branch: main
+      agent_role: executor
+      timeout: 120s
+      retry: 2
+
+    - id: install_dependencies
+      name: "Install Dependencies"
+      type: execute_python
+      depends_on: [clone_repo]
+      params:
+        script: |
+          pip install -r requirements.txt
+      agent_role: executor
+      timeout: 300s
+      retry: 1
+
+    - id: run_tests
+      name: "Run Test Suite"
+      type: execute_python
+      depends_on: [install_dependencies]
+      params:
+        script: pytest tests/ -v --cov
+      agent_role: executor
+      timeout: 600s
+      retry: 2
+      condition: ${{ inputs.run_tests }} == true
+
+    - id: build_docker
+      name: "Build Docker Image"
+      type: docker_build
+      depends_on: [run_tests]
+      params:
+        dockerfile: Dockerfile
+        tag: ${{ inputs.environment }}-latest
+      agent_role: executor
+      timeout: 900s
+
+    - id: push_image
+      name: "Push Docker Image to Registry"
+      type: docker_run
+      depends_on: [build_docker]
+      params:
+        command: docker push myregistry/app:${{ inputs.environment }}-latest
+      agent_role: executor
+      timeout: 600s
+
+    - id: deploy_to_k8s
+      name: "Deploy to Kubernetes"
+      type: kubernetes_apply
+      depends_on: [push_image]
+      params:
+        manifest: k8s/deployment-${{ inputs.environment }}.yaml
+        namespace: ${{ inputs.environment }}
+      agent_role: executor
+      timeout: 300s
+      approval_required: ${{ inputs.environment }} == 'prod'
+
+    - id: health_check
+      name: "Verify Deployment Health"
+      type: http_request
+      depends_on: [deploy_to_k8s]
+      params:
+        url: https://app-${{ inputs.environment }}.example.com/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 60s
+      retry: 5
+      retry_delay: 10s
+
+    - id: send_notification
+      name: "Send Deployment Notification"
+      type: send_slack
+      depends_on: [health_check]
+      params:
+        channel: "#deployments"
+        message: "Successfully deployed app to ${{ inputs.environment }}"
+      agent_role: executor
+      timeout: 30s

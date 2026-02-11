@@ -1,0 +1,168 @@
+workflow:
+  id: "system-health-check"
+  version: "1.0.0"
+  name: "System Health Check"
+  description: "Continuously monitor system health and auto-remediate issues"
+  schedule: "*/5 * * * *"  # Every 5 minutes
+
+  inputs:
+    - name: auto_remediate
+      type: boolean
+      default: true
+      description: "Whether to automatically remediate failures"
+
+  outputs:
+    - name: overall_health
+      type: enum
+      values: [healthy, degraded, critical]
+      description: "Overall system health status"
+
+    - name: failed_services
+      type: json
+      description: "List of failed services"
+
+  steps:
+    - id: check_api_gateway
+      name: "Check API Gateway"
+      type: http_request
+      params:
+        url: http://api-gateway:8000/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_auth_service
+      name: "Check Auth Service"
+      type: http_request
+      params:
+        url: http://auth-service:8001/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_task_planner
+      name: "Check Task Planner"
+      type: http_request
+      params:
+        url: http://task-planner:8002/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_agent_orchestrator
+      name: "Check Agent Orchestrator"
+      type: http_request
+      params:
+        url: http://agent-orchestrator:8003/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_memory_service
+      name: "Check Memory Service"
+      type: http_request
+      params:
+        url: http://memory-service:8004/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_ai_runtime
+      name: "Check AI Runtime"
+      type: http_request
+      params:
+        url: http://ai-runtime:8005/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_tool_runner
+      name: "Check Tool Runner"
+      type: http_request
+      params:
+        url: http://tool-runner:8006/health
+        method: GET
+        expected_status: 200
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_database
+      name: "Check Database Connection"
+      type: query_database
+      params:
+        query: SELECT 1
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: check_redis
+      name: "Check Redis Connection"
+      type: execute_python
+      params:
+        script: |
+          import redis
+          r = redis.Redis(host='redis', port=6379)
+          r.ping()
+      agent_role: executor
+      timeout: 10s
+      retry: 2
+
+    - id: aggregate_results
+      name: "Aggregate Health Results"
+      type: execute_python
+      depends_on:
+        - check_api_gateway
+        - check_auth_service
+        - check_task_planner
+        - check_agent_orchestrator
+        - check_memory_service
+        - check_ai_runtime
+        - check_tool_runner
+        - check_database
+        - check_redis
+      params:
+        script: |
+          # Aggregate all health check results
+          failed = []
+          # Logic to determine failed services
+          overall_health = "healthy" if not failed else "critical"
+      agent_role: executor
+      timeout: 30s
+
+    - id: send_alert
+      name: "Send Alert if Unhealthy"
+      type: send_alert
+      depends_on: [aggregate_results]
+      params:
+        severity: critical
+        message: "System health check failed: ${{ steps.aggregate_results.output.failed }}"
+      agent_role: executor
+      timeout: 30s
+      condition: ${{ steps.aggregate_results.output.overall_health }} != 'healthy'
+
+    - id: auto_remediate
+      name: "Auto-Remediate Failed Services"
+      type: execute_python
+      depends_on: [aggregate_results]
+      params:
+        script: |
+          # Auto-restart failed services
+          import subprocess
+          for service in failed_services:
+              subprocess.run(['docker', 'restart', service])
+      agent_role: executor
+      timeout: 120s
+      condition: ${{ inputs.auto_remediate }} == true AND ${{ steps.aggregate_results.output.overall_health }} == 'critical'
