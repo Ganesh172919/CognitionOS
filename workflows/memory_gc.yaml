@@ -1,0 +1,134 @@
+workflow:
+  id: "memory-gc-daily"
+  version: "1.0.0"
+  name: "Daily Memory Garbage Collection"
+  description: "Clean up stale memories, compress old memories, and archive inactive memories"
+  schedule: "0 2 * * *"  # Run at 2 AM daily
+
+  inputs:
+    - name: stale_threshold_days
+      type: integer
+      default: 90
+      description: "Days after which memories are considered stale"
+
+    - name: compression_threshold_days
+      type: integer
+      default: 30
+      description: "Days after which memories should be compressed"
+
+    - name: archive_threshold_days
+      type: integer
+      default: 180
+      description: "Days after which memories should be archived"
+
+  outputs:
+    - name: memories_deleted
+      type: integer
+      description: "Number of memories deleted"
+
+    - name: memories_compressed
+      type: integer
+      description: "Number of memories compressed"
+
+    - name: memories_archived
+      type: integer
+      description: "Number of memories archived"
+
+  steps:
+    - id: identify_stale
+      name: "Identify Stale Memories"
+      type: query_database
+      params:
+        query: >
+          SELECT id FROM memories
+          WHERE accessed_at < NOW() - INTERVAL '${{ inputs.stale_threshold_days }} days'
+          AND archived = false
+      agent_role: executor
+      timeout: 120s
+
+    - id: delete_stale
+      name: "Delete Stale Memories"
+      type: update_database
+      depends_on: [identify_stale]
+      params:
+        query: >
+          DELETE FROM memories
+          WHERE id IN (${{ steps.identify_stale.output.ids }})
+      agent_role: executor
+      timeout: 300s
+
+    - id: identify_compressible
+      name: "Identify Compressible Memories"
+      type: query_database
+      depends_on: [delete_stale]
+      params:
+        query: >
+          SELECT id FROM memories
+          WHERE created_at < NOW() - INTERVAL '${{ inputs.compression_threshold_days }} days'
+          AND compressed = false
+          AND archived = false
+      agent_role: executor
+      timeout: 120s
+
+    - id: compress_old
+      name: "Compress Old Memories"
+      type: memory_store
+      depends_on: [identify_compressible]
+      params:
+        operation: compress
+        memory_ids: ${{ steps.identify_compressible.output.ids }}
+        compression_ratio: 0.5
+      agent_role: executor
+      timeout: 600s
+
+    - id: identify_archivable
+      name: "Identify Archivable Memories"
+      type: query_database
+      depends_on: [compress_old]
+      params:
+        query: >
+          SELECT id FROM memories
+          WHERE accessed_at < NOW() - INTERVAL '${{ inputs.archive_threshold_days }} days'
+          AND archived = false
+      agent_role: executor
+      timeout: 120s
+
+    - id: archive_old
+      name: "Archive Old Memories"
+      type: memory_store
+      depends_on: [identify_archivable]
+      params:
+        operation: archive
+        memory_ids: ${{ steps.identify_archivable.output.ids }}
+        destination: s3://cognos-archive/memories/
+      agent_role: executor
+      timeout: 1800s
+
+    - id: update_metrics
+      name: "Update Memory Metrics"
+      type: http_request
+      depends_on: [delete_stale, compress_old, archive_old]
+      params:
+        url: http://observability:8009/metrics
+        method: POST
+        body:
+          metric: memory_gc_stats
+          deleted_count: ${{ steps.delete_stale.output.count }}
+          compressed_count: ${{ steps.compress_old.output.count }}
+          archived_count: ${{ steps.archive_old.output.count }}
+      agent_role: executor
+      timeout: 30s
+
+    - id: send_report
+      name: "Send GC Report"
+      type: send_alert
+      depends_on: [update_metrics]
+      params:
+        severity: info
+        message: >
+          Daily Memory GC Complete:
+          - Deleted: ${{ steps.delete_stale.output.count }}
+          - Compressed: ${{ steps.compress_old.output.count }}
+          - Archived: ${{ steps.archive_old.output.count }}
+      agent_role: executor
+      timeout: 30s
