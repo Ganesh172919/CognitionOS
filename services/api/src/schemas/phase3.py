@@ -273,3 +273,182 @@ class EnforceBudgetResponse(BaseModel):
     should_halt: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==================== Hierarchical Memory Schemas ====================
+
+class StoreMemoryRequest(BaseModel):
+    """Request to store memory in L1 working memory"""
+    agent_id: UUID = Field(..., description="Agent identifier")
+    workflow_execution_id: UUID = Field(..., description="Workflow execution identifier")
+    content: str = Field(..., min_length=1, description="Memory content")
+    importance_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Importance score (0-1)")
+    embedding: Optional[Dict[str, Any]] = Field(default=None, description="Embedding vector and metadata")
+    memory_type: str = Field(default="observation", description="Memory type (observation, action, reflection)")
+    tags: List[str] = Field(default_factory=list, description="Memory tags")
+    expires_at: Optional[datetime] = Field(default=None, description="Expiration timestamp")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+    @field_validator('memory_type')
+    @classmethod
+    def validate_memory_type(cls, memory_type: str) -> str:
+        """Validate memory type value"""
+        valid_types = ['observation', 'action', 'result', 'reasoning', 'metadata']
+        if memory_type not in valid_types:
+            raise ValueError(f"Memory type must be one of: {', '.join(valid_types)}")
+        return memory_type
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RetrieveMemoryRequest(BaseModel):
+    """Request to retrieve memories"""
+    agent_id: UUID = Field(..., description="Agent identifier")
+    tier: str = Field(default="l1_working", description="Memory tier (l1_working, l2_episodic, l3_longterm)")
+    workflow_execution_id: Optional[UUID] = Field(default=None, description="Workflow execution identifier")
+    min_importance: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Minimum importance score")
+    limit: int = Field(default=100, ge=1, le=1000, description="Maximum results")
+
+    @field_validator('tier')
+    @classmethod
+    def validate_tier(cls, tier: str) -> str:
+        """Validate memory tier"""
+        valid_tiers = ['l1_working', 'l2_episodic', 'l3_longterm']
+        if tier not in valid_tiers:
+            raise ValueError(f"Tier must be one of: {', '.join(valid_tiers)}")
+        return tier
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PromoteMemoriesRequest(BaseModel):
+    """Request to promote memories between tiers"""
+    agent_id: UUID = Field(..., description="Agent identifier")
+    memory_ids: Optional[List[UUID]] = Field(default=None, description="Specific memory IDs to promote")
+    min_importance: float = Field(default=0.7, ge=0.0, le=1.0, description="Minimum importance for auto-selection")
+    min_access_count: int = Field(default=3, ge=1, description="Minimum access count for L1→L2")
+    min_age_hours: float = Field(default=1.0, ge=0.0, description="Minimum age in hours for L1→L2")
+    cluster_id: Optional[str] = Field(default=None, description="Cluster ID for L1→L2")
+    summary: Optional[str] = Field(default=None, description="Summary for L1→L2")
+    knowledge_type: Optional[str] = Field(default=None, description="Knowledge type for L2→L3")
+    title: Optional[str] = Field(default=None, description="Title for L2→L3")
+
+    @field_validator('knowledge_type')
+    @classmethod
+    def validate_knowledge_type(cls, knowledge_type: Optional[str]) -> Optional[str]:
+        """Validate knowledge type"""
+        if knowledge_type is None:
+            return None
+        valid_types = ['factual', 'procedural', 'conceptual', 'metacognitive', 'strategic']
+        if knowledge_type not in valid_types:
+            raise ValueError(f"Knowledge type must be one of: {', '.join(valid_types)}")
+        return knowledge_type
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EvictMemoriesRequest(BaseModel):
+    """Request to evict memories from L1"""
+    agent_id: UUID = Field(..., description="Agent identifier")
+    workflow_execution_id: UUID = Field(..., description="Workflow execution identifier")
+    max_count: int = Field(default=10, ge=1, le=100, description="Maximum memories to evict")
+    strategy: str = Field(default="lru", description="Eviction strategy (lru, low_importance)")
+
+    @field_validator('strategy')
+    @classmethod
+    def validate_strategy(cls, strategy: str) -> str:
+        """Validate eviction strategy"""
+        valid_strategies = ['lru', 'low_importance']
+        if strategy not in valid_strategies:
+            raise ValueError(f"Strategy must be one of: {', '.join(valid_strategies)}")
+        return strategy
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MemoryStatisticsRequest(BaseModel):
+    """Request to get memory statistics"""
+    agent_id: UUID = Field(..., description="Agent identifier")
+    include_archived: bool = Field(default=False, description="Include archived L3 memories")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SearchMemoriesRequest(BaseModel):
+    """Request to search memories across tiers"""
+    agent_id: UUID = Field(..., description="Agent identifier")
+    query_embedding: Dict[str, Any] = Field(..., description="Query embedding vector and metadata")
+    top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return")
+    tiers: List[str] = Field(default_factory=lambda: ["l1_working", "l2_episodic", "l3_longterm"], description="Tiers to search")
+    similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="Minimum similarity score")
+
+    @field_validator('tiers')
+    @classmethod
+    def validate_tiers(cls, tiers: List[str]) -> List[str]:
+        """Validate memory tiers"""
+        valid_tiers = ['l1_working', 'l2_episodic', 'l3_longterm']
+        for tier in tiers:
+            if tier not in valid_tiers:
+                raise ValueError(f"Each tier must be one of: {', '.join(valid_tiers)}")
+        return tiers
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UpdateImportanceRequest(BaseModel):
+    """Request to update importance scores"""
+    agent_id: UUID = Field(..., description="Agent identifier")
+    workflow_execution_id: Optional[UUID] = Field(default=None, description="Workflow execution identifier")
+    memory_ids: Optional[List[UUID]] = Field(default=None, description="Specific memory IDs to update")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MemoryResponse(BaseModel):
+    """Response schema for memory"""
+    id: UUID
+    tier: str
+    content: str
+    importance_score: float
+    created_at: str
+    memory_type: Optional[str] = None
+    access_count: Optional[int] = None
+    tags: Optional[List[str]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MemoryListResponse(BaseModel):
+    """Response schema for memory list"""
+    memories: List[MemoryResponse]
+    total: int
+
+
+class MemoryStatisticsResponse(BaseModel):
+    """Response schema for memory statistics"""
+    l1_count: int
+    l2_count: int
+    l3_count: int
+    total_size_mb: float
+    l1_avg_importance: float
+    l2_avg_importance: float
+    l3_avg_importance: float
+    l1_avg_age_hours: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EvictMemoriesResponse(BaseModel):
+    """Response schema for memory eviction"""
+    evicted_count: int
+    strategy: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UpdateImportanceResponse(BaseModel):
+    """Response schema for importance update"""
+    updated_count: int
+
+    model_config = ConfigDict(from_attributes=True)

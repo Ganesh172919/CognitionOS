@@ -183,10 +183,11 @@ from services.api.src.routes import auth
 app.include_router(auth.router)
 
 # Import and include Phase 3 routes
-from services.api.src.routes import checkpoints, health, cost
+from services.api.src.routes import checkpoints, health, cost, memory
 app.include_router(checkpoints.router)
 app.include_router(health.router)
 app.include_router(cost.router)
+app.include_router(memory.router)
 
 # Import and include WebSocket routes
 from services.api.src.routes import websocket as ws_router
