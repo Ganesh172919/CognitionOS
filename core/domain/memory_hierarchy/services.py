@@ -270,7 +270,7 @@ class MemoryImportanceScorer:
             recency_weight: Weight for recency factor
             content_weight: Weight for content signals
         """
-        if not math.isclose(access_weight + recency_weight + content_weight, 1.0):
+        if not math.isclose(access_weight + recency_weight + content_weight, 1.0, abs_tol=1e-9):
             raise ValueError("Weights must sum to 1.0")
 
         self.access_weight = access_weight
@@ -354,7 +354,7 @@ class MemoryImportanceScorer:
 
             # Update if score changed significantly
             if abs(new_score - memory.importance_score) > 0.05:
-                memory.importance_score = new_score
+                memory.update_importance_score(new_score)
                 await l1_repository.save(memory)
                 updated_count += 1
 

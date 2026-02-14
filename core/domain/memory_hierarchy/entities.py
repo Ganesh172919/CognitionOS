@@ -168,6 +168,20 @@ class WorkingMemory:
         self.access_count += 1
         self.last_accessed_at = datetime.utcnow()
 
+    def update_importance_score(self, new_score: float) -> None:
+        """
+        Update importance score with validation.
+        
+        Args:
+            new_score: New importance score (0-1)
+            
+        Raises:
+            ValueError: If score is not between 0 and 1
+        """
+        if not 0.0 <= new_score <= 1.0:
+            raise ValueError(f"Importance score must be between 0 and 1, got {new_score}")
+        self.importance_score = new_score
+
     def calculate_age_hours(self) -> float:
         """Calculate age of memory in hours"""
         age_delta = datetime.utcnow() - self.created_at
