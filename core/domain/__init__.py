@@ -12,6 +12,9 @@ Bounded Contexts:
 - Memory: Long-term memory storage, retrieval, and lifecycle
 - Task: Task planning, assignment, and execution
 - Execution: Execution tracking and observability
+- Checkpoint: Checkpoint/resume for 24+ hour autonomous workflows (Phase 3)
+- Health Monitoring: Agent health tracking and incident management (Phase 3)
+- Cost Governance: Budget enforcement and cost tracking (Phase 3)
 
 Architecture:
 - ZERO external dependencies (only Python stdlib)
@@ -26,6 +29,10 @@ from . import agent
 from . import memory
 from . import task
 from . import execution
+from . import checkpoint
+from . import health_monitoring
+from . import cost_governance
+from . import memory_hierarchy
 
 __all__ = [
     "workflow",
@@ -33,6 +40,10 @@ __all__ = [
     "memory",
     "task",
     "execution",
+    "checkpoint",
+    "health_monitoring",
+    "cost_governance",
+    "memory_hierarchy",
 ]
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"  # Phase 3 Extended Agent Operation

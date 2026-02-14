@@ -75,6 +75,10 @@ app = FastAPI(
     - Agent orchestration
     - Memory operations
     - Task planning
+    - **Phase 3: Extended Agent Operation**
+      - Checkpoint/resume for 24+ hour workflows
+      - Agent health monitoring with heartbeat tracking
+      - Cost governance and budget enforcement
     
     Built with Domain-Driven Design and Clean Architecture principles.
     """,
@@ -177,6 +181,13 @@ app.include_router(workflows.router)
 # Import and include auth routes
 from services.api.src.routes import auth
 app.include_router(auth.router)
+
+# Import and include Phase 3 routes
+from services.api.src.routes import checkpoints, health, cost, memory
+app.include_router(checkpoints.router)
+app.include_router(health.router)
+app.include_router(cost.router)
+app.include_router(memory.router)
 
 # Import and include WebSocket routes
 from services.api.src.routes import websocket as ws_router

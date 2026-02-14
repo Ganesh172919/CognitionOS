@@ -31,6 +31,18 @@ from infrastructure.persistence.workflow_repository import (
     SQLAlchemyWorkflowRepository,
     SQLAlchemyWorkflowExecutionRepository,
 )
+from infrastructure.persistence.checkpoint_repository import PostgreSQLCheckpointRepository
+from infrastructure.persistence.health_repository import (
+    PostgreSQLAgentHealthRepository,
+    PostgreSQLHealthIncidentRepository,
+)
+from infrastructure.persistence.cost_repository import (
+    PostgreSQLWorkflowBudgetRepository,
+    PostgreSQLCostTrackingRepository,
+)
+from core.domain.checkpoint.services import CheckpointService
+from core.domain.health_monitoring.services import AgentHealthMonitoringService
+from core.domain.cost_governance.services import CostGovernanceService
 from infrastructure.events.event_bus import InMemoryEventBus
 
 
@@ -175,3 +187,281 @@ async def check_rabbitmq_health() -> bool:
     """Check RabbitMQ connection health"""
     # TODO: Implement RabbitMQ health check
     return True
+
+
+# ==================== Phase 3: Checkpoint Dependencies ====================
+
+async def get_checkpoint_repository(
+    session: AsyncSession = None
+) -> PostgreSQLCheckpointRepository:
+    """Get checkpoint repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLCheckpointRepository(session)
+    return PostgreSQLCheckpointRepository(session)
+
+
+async def get_checkpoint_service(
+    session: AsyncSession = None
+) -> CheckpointService:
+    """Get checkpoint service dependency"""
+    checkpoint_repo = await get_checkpoint_repository(session)
+    return CheckpointService(checkpoint_repository=checkpoint_repo)
+
+
+# ==================== Phase 3: Health Monitoring Dependencies ====================
+
+async def get_health_repository(
+    session: AsyncSession = None
+) -> PostgreSQLAgentHealthRepository:
+    """Get agent health repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLAgentHealthRepository(session)
+    return PostgreSQLAgentHealthRepository(session)
+
+
+async def get_health_incident_repository(
+    session: AsyncSession = None
+) -> PostgreSQLHealthIncidentRepository:
+    """Get health incident repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLHealthIncidentRepository(session)
+    return PostgreSQLHealthIncidentRepository(session)
+
+
+async def get_health_monitoring_service(
+    session: AsyncSession = None
+) -> AgentHealthMonitoringService:
+    """Get health monitoring service dependency"""
+    health_repo = await get_health_repository(session)
+    incident_repo = await get_health_incident_repository(session)
+    return AgentHealthMonitoringService(
+        health_repository=health_repo,
+        incident_repository=incident_repo,
+    )
+
+
+# ==================== Phase 3: Cost Governance Dependencies ====================
+
+async def get_budget_repository(
+    session: AsyncSession = None
+) -> PostgreSQLWorkflowBudgetRepository:
+    """Get workflow budget repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLWorkflowBudgetRepository(session)
+    return PostgreSQLWorkflowBudgetRepository(session)
+
+
+async def get_cost_tracking_repository(
+    session: AsyncSession = None
+) -> PostgreSQLCostTrackingRepository:
+    """Get cost tracking repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLCostTrackingRepository(session)
+    return PostgreSQLCostTrackingRepository(session)
+
+
+async def get_cost_governance_service(
+    session: AsyncSession = None
+) -> CostGovernanceService:
+    """Get cost governance service dependency"""
+    budget_repo = await get_budget_repository(session)
+    cost_tracking_repo = await get_cost_tracking_repository(session)
+    return CostGovernanceService(
+        budget_repository=budget_repo,
+        cost_tracking_repository=cost_tracking_repo,
+    )
+
+
+# ==================== Phase 3: Memory Hierarchy Dependencies ====================
+
+async def get_working_memory_repository(
+    session: AsyncSession = None
+):
+    """Get working memory repository dependency"""
+    from infrastructure.persistence.memory_hierarchy_repository import PostgreSQLWorkingMemoryRepository
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLWorkingMemoryRepository(session)
+    return PostgreSQLWorkingMemoryRepository(session)
+
+
+async def get_episodic_memory_repository(
+    session: AsyncSession = None
+):
+    """Get episodic memory repository dependency"""
+    from infrastructure.persistence.memory_hierarchy_repository import PostgreSQLEpisodicMemoryRepository
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLEpisodicMemoryRepository(session)
+    return PostgreSQLEpisodicMemoryRepository(session)
+
+
+async def get_longterm_memory_repository(
+    session: AsyncSession = None
+):
+    """Get long-term memory repository dependency"""
+    from infrastructure.persistence.memory_hierarchy_repository import PostgreSQLLongTermMemoryRepository
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLLongTermMemoryRepository(session)
+    return PostgreSQLLongTermMemoryRepository(session)
+
+
+async def get_store_memory_use_case(
+    session: AsyncSession = None
+):
+    """Get store working memory use case dependency"""
+    from core.application.memory_hierarchy.use_cases import StoreWorkingMemoryUseCase
+    l1_repo = await get_working_memory_repository(session)
+    event_bus = get_event_bus()
+    return StoreWorkingMemoryUseCase(
+        l1_repository=l1_repo,
+        event_publisher=event_bus,
+    )
+
+
+async def get_retrieve_memory_use_case(
+    session: AsyncSession = None
+):
+    """Get retrieve working memory use case dependency"""
+    from core.application.memory_hierarchy.use_cases import RetrieveWorkingMemoryUseCase
+    l1_repo = await get_working_memory_repository(session)
+    event_bus = get_event_bus()
+    return RetrieveWorkingMemoryUseCase(
+        l1_repository=l1_repo,
+        event_publisher=event_bus,
+    )
+
+
+async def get_promote_l2_use_case(
+    session: AsyncSession = None
+):
+    """Get promote L1 to L2 use case dependency"""
+    from core.application.memory_hierarchy.use_cases import PromoteMemoriesToL2UseCase
+    from core.domain.memory_hierarchy.services import MemoryTierManager, MemoryCompressionService
+    
+    l1_repo = await get_working_memory_repository(session)
+    l2_repo = await get_episodic_memory_repository(session)
+    l3_repo = await get_longterm_memory_repository(session)
+    event_bus = get_event_bus()
+    
+    tier_manager = MemoryTierManager(
+        l1_repository=l1_repo,
+        l2_repository=l2_repo,
+        l3_repository=l3_repo,
+    )
+    compression_service = MemoryCompressionService()
+    
+    return PromoteMemoriesToL2UseCase(
+        tier_manager=tier_manager,
+        compression_service=compression_service,
+        l1_repository=l1_repo,
+        event_publisher=event_bus,
+    )
+
+
+async def get_promote_l3_use_case(
+    session: AsyncSession = None
+):
+    """Get promote L2 to L3 use case dependency"""
+    from core.application.memory_hierarchy.use_cases import PromoteMemoriesToL3UseCase
+    from core.domain.memory_hierarchy.services import MemoryTierManager
+    
+    l1_repo = await get_working_memory_repository(session)
+    l2_repo = await get_episodic_memory_repository(session)
+    l3_repo = await get_longterm_memory_repository(session)
+    event_bus = get_event_bus()
+    
+    tier_manager = MemoryTierManager(
+        l1_repository=l1_repo,
+        l2_repository=l2_repo,
+        l3_repository=l3_repo,
+    )
+    
+    return PromoteMemoriesToL3UseCase(
+        tier_manager=tier_manager,
+        l2_repository=l2_repo,
+        event_publisher=event_bus,
+    )
+
+
+async def get_evict_memories_use_case(
+    session: AsyncSession = None
+):
+    """Get evict memories use case dependency"""
+    from core.application.memory_hierarchy.use_cases import EvictLowPriorityMemoriesUseCase
+    from core.domain.memory_hierarchy.services import MemoryTierManager
+    
+    l1_repo = await get_working_memory_repository(session)
+    l2_repo = await get_episodic_memory_repository(session)
+    l3_repo = await get_longterm_memory_repository(session)
+    event_bus = get_event_bus()
+    
+    tier_manager = MemoryTierManager(
+        l1_repository=l1_repo,
+        l2_repository=l2_repo,
+        l3_repository=l3_repo,
+    )
+    
+    return EvictLowPriorityMemoriesUseCase(
+        tier_manager=tier_manager,
+        event_publisher=event_bus,
+    )
+
+
+async def get_memory_statistics_use_case(
+    session: AsyncSession = None
+):
+    """Get memory statistics use case dependency"""
+    from core.application.memory_hierarchy.use_cases import GetMemoryStatisticsUseCase
+    
+    l1_repo = await get_working_memory_repository(session)
+    l2_repo = await get_episodic_memory_repository(session)
+    l3_repo = await get_longterm_memory_repository(session)
+    
+    return GetMemoryStatisticsUseCase(
+        l1_repository=l1_repo,
+        l2_repository=l2_repo,
+        l3_repository=l3_repo,
+    )
+
+
+async def get_search_memories_use_case(
+    session: AsyncSession = None
+):
+    """Get search memories use case dependency"""
+    from core.application.memory_hierarchy.use_cases import SearchMemoriesAcrossTiersUseCase
+    from core.domain.memory_hierarchy.services import MemoryCompressionService
+    
+    l1_repo = await get_working_memory_repository(session)
+    l2_repo = await get_episodic_memory_repository(session)
+    l3_repo = await get_longterm_memory_repository(session)
+    compression_service = MemoryCompressionService()
+    
+    return SearchMemoriesAcrossTiersUseCase(
+        l1_repository=l1_repo,
+        l2_repository=l2_repo,
+        l3_repository=l3_repo,
+        compression_service=compression_service,
+    )
+
+
+async def get_update_importance_use_case(
+    session: AsyncSession = None
+):
+    """Get update importance use case dependency"""
+    from core.application.memory_hierarchy.use_cases import UpdateMemoryImportanceUseCase
+    from core.domain.memory_hierarchy.services import MemoryImportanceScorer
+    
+    l1_repo = await get_working_memory_repository(session)
+    importance_scorer = MemoryImportanceScorer()
+    
+    return UpdateMemoryImportanceUseCase(
+        importance_scorer=importance_scorer,
+        l1_repository=l1_repo,
+    )
