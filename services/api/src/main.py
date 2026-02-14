@@ -178,6 +178,10 @@ app.include_router(workflows.router)
 from services.api.src.routes import auth
 app.include_router(auth.router)
 
+# Import and include WebSocket routes
+from services.api.src.routes import websocket as ws_router
+app.include_router(ws_router.router)
+
 
 # ==================== Main Entry Point ====================
 
