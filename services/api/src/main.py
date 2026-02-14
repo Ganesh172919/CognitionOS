@@ -26,6 +26,12 @@ from services.api.src.dependencies.injection import (
     check_redis_health,
     check_rabbitmq_health,
 )
+from infrastructure.observability import (
+    setup_tracing,
+    instrument_fastapi,
+    PrometheusMiddleware,
+    create_metrics_app,
+)
 
 
 # Configuration
@@ -40,6 +46,16 @@ async def lifespan(app: FastAPI):
     print(f"Starting {config.service_name} v{config.service_version}")
     print(f"Environment: {config.environment}")
     print(f"API URL: http://{config.api.host}:{config.api.port}")
+    
+    # Initialize tracing
+    if config.observability.enable_tracing:
+        setup_tracing(service_name=config.service_name)
+        instrument_fastapi(app)
+        print(f"OpenTelemetry tracing enabled (Jaeger: {config.observability.jaeger_host}:{config.observability.jaeger_port})")
+    
+    # Initialize metrics
+    if config.observability.enable_metrics:
+        print(f"Prometheus metrics enabled on /metrics")
     
     yield
     
@@ -82,6 +98,17 @@ app.add_middleware(
 
 # GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Prometheus metrics middleware
+if config.observability.enable_metrics:
+    app.add_middleware(PrometheusMiddleware)
+
+
+# ==================== Metrics Endpoint ====================
+
+# Mount metrics endpoint
+metrics_app = create_metrics_app()
+app.mount("/metrics", metrics_app)
 
 
 # ==================== Error Handlers ====================
