@@ -63,7 +63,18 @@ CognitionOS transforms natural language goals into autonomous execution through:
 - Docker & Docker Compose
 - OpenAI or Anthropic API key (for AI features)
 
-### Run Locally
+### Option 1: Quick Start (Recommended)
+
+```bash
+# Clone repository
+git clone https://github.com/Ganesh172919/CognitionOS.git
+cd CognitionOS
+
+# Run quick start script
+./scripts/quickstart.sh
+```
+
+### Option 2: Manual Setup
 
 ```bash
 # Clone repository
@@ -78,31 +89,44 @@ cp .env.example .env
 docker-compose up -d
 
 # Check health
-curl http://localhost:8000/health
+curl http://localhost:8100/health  # V3 API
+curl http://localhost:8000/health  # API Gateway
 ```
 
-### Test the System
+### Test the System (V3 API)
 
 ```bash
-# Register a user
-curl -X POST http://localhost:8000/auth/register \
+# Create a workflow
+curl -X POST http://localhost:8100/api/v3/workflows \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","username":"testuser","password":"password123"}'
+  -d '{
+    "workflow_id": "test-workflow",
+    "version": "1.0.0",
+    "name": "Test Workflow",
+    "description": "A test workflow",
+    "steps": [
+      {
+        "step_id": "step1",
+        "name": "First Step",
+        "agent_capability": "general",
+        "inputs": {},
+        "depends_on": []
+      }
+    ]
+  }'
 
-# Login
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"password123"}'
+# List workflows
+curl http://localhost:8100/api/v3/workflows
 
-# Create a task plan
-curl -X POST http://localhost:8000/tasks/plan \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <access_token>" \
-  -d '{"user_id":"<user_id>","goal":"Build a web application with user authentication"}'
+# View API documentation
+open http://localhost:8100/docs
 ```
 
 ## 📚 Documentation
 
+- **[Phase 2 Implementation](docs/PHASE_2_IMPLEMENTATION.md)**: V3 API, LLM integration, async tasks
+- **[V3 Clean Architecture](docs/v3/clean_architecture.md)**: DDD principles and layer structure
+- **[V3 Domain Model](docs/v3/domain_model.md)**: Bounded contexts and entities
 - **[Architecture](docs/architecture.md)**: System design and component interaction
 - **[Agent Model](docs/agent_model.md)**: Agent types, lifecycle, and orchestration
 - **[Memory Model](docs/memory_model.md)**: Multi-layer memory architecture
@@ -110,6 +134,39 @@ curl -X POST http://localhost:8000/tasks/plan \
 - **[Deployment](docs/deployment.md)**: Production deployment guide
 
 ## 🔑 Key Features
+
+### V3 Clean Architecture (New!)
+
+CognitionOS V3 implements Domain-Driven Design with clean architecture:
+
+**5 Bounded Contexts**:
+- **Workflow**: Orchestrate multi-step DAG workflows
+- **Agent**: Manage AI agents with capabilities
+- **Memory**: Long-term semantic memory with pgvector
+- **Task**: Work planning and decomposition
+- **Execution**: Observability and tracing
+
+**4 Architecture Layers**:
+```
+Domain Layer        → Pure business logic (zero dependencies)
+Application Layer   → Use cases and orchestration
+Infrastructure Layer → Database, events, LLM providers
+Interface Layer     → FastAPI REST API (Port 8100)
+```
+
+**RESTful API**:
+```bash
+# Create workflow
+POST /api/v3/workflows
+
+# Execute workflow
+POST /api/v3/workflows/execute
+
+# Get execution status
+GET /api/v3/workflows/executions/{id}
+```
+
+See [Phase 2 Implementation Guide](docs/PHASE_2_IMPLEMENTATION.md) for full API reference.
 
 ### 1. Task Planning with DAG
 
@@ -177,6 +234,17 @@ Every action is traced and explainable:
 
 ## 🏛️ Services
 
+### V3 Services (Clean Architecture)
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| V3 API | 8100 | Clean architecture REST API with DDD |
+| - | - | Workflow management and execution |
+| - | - | Agent orchestration |
+| - | - | OpenAPI/Swagger documentation |
+
+### V1/V2 Services (Legacy)
+
 | Service | Port | Purpose |
 |---------|------|---------|
 | API Gateway | 8000 | Entry point, routing, rate limiting |
@@ -187,6 +255,14 @@ Every action is traced and explainable:
 | AI Runtime | 8005 | LLM routing and execution |
 | Tool Runner | 8006 | Sandboxed tool execution |
 | Audit Log | 8007 | Immutable action logging |
+
+### Infrastructure Services
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| PostgreSQL | 5432 | Primary database with pgvector |
+| Redis | 6379 | Cache and session store |
+| RabbitMQ | 5672/15672 | Message broker and admin UI |
 
 ## 🛠️ Technology Stack
 
@@ -288,23 +364,32 @@ k6 run tests/load/basic-scenario.js
 
 ## 🗺️ Roadmap
 
-### Phase 1 (Current) ✅
-- Core services implemented
+### Phase 1 (Complete) ✅
+- Core services implemented (7 microservices)
 - Basic agent orchestration
 - Task planning with DAG
 - Authentication and authorization
-
-### Phase 2 (Next)
-- Production database integration
-- Real LLM integration (OpenAI, Anthropic)
+- Database integration with pgvector
+- LLM integration (OpenAI, Anthropic)
 - Frontend dashboard
-- Memory service with vector DB
+- Security hardening
+
+### Phase 2 (In Progress) 🚧
+- **V3 Clean Architecture**: Domain-Driven Design with 5 bounded contexts
+- **FastAPI V3 API**: REST endpoints for workflows and agents (Port 8100)
+- **LLM Provider Abstraction**: Multi-provider with automatic fallback
+- **Async Task Queue**: Celery-based workflow execution
+- **Structured Logging**: JSON logs with correlation IDs
+- **Centralized Configuration**: Pydantic v2 settings management
+
+See [Phase 2 Implementation Guide](docs/PHASE_2_IMPLEMENTATION.md) for details.
 
 ### Phase 3 (Future)
 - Agent learning from feedback
 - Multi-agent collaboration
 - Custom agent marketplace
 - Mobile app
+- Advanced observability (OpenTelemetry, Prometheus, Grafana)
 
 ## 🤝 Contributing
 
