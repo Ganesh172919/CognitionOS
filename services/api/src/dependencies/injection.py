@@ -31,6 +31,18 @@ from infrastructure.persistence.workflow_repository import (
     SQLAlchemyWorkflowRepository,
     SQLAlchemyWorkflowExecutionRepository,
 )
+from infrastructure.persistence.checkpoint_repository import PostgreSQLCheckpointRepository
+from infrastructure.persistence.health_repository import (
+    PostgreSQLAgentHealthRepository,
+    PostgreSQLHealthIncidentRepository,
+)
+from infrastructure.persistence.cost_repository import (
+    PostgreSQLWorkflowBudgetRepository,
+    PostgreSQLCostTrackingRepository,
+)
+from core.domain.checkpoint.services import CheckpointService
+from core.domain.health_monitoring.services import AgentHealthMonitoringService
+from core.domain.cost_governance.services import CostGovernanceService
 from infrastructure.events.event_bus import InMemoryEventBus
 
 
@@ -175,3 +187,91 @@ async def check_rabbitmq_health() -> bool:
     """Check RabbitMQ connection health"""
     # TODO: Implement RabbitMQ health check
     return True
+
+
+# ==================== Phase 3: Checkpoint Dependencies ====================
+
+async def get_checkpoint_repository(
+    session: AsyncSession = None
+) -> PostgreSQLCheckpointRepository:
+    """Get checkpoint repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLCheckpointRepository(session)
+    return PostgreSQLCheckpointRepository(session)
+
+
+async def get_checkpoint_service(
+    session: AsyncSession = None
+) -> CheckpointService:
+    """Get checkpoint service dependency"""
+    checkpoint_repo = await get_checkpoint_repository(session)
+    return CheckpointService(checkpoint_repository=checkpoint_repo)
+
+
+# ==================== Phase 3: Health Monitoring Dependencies ====================
+
+async def get_health_repository(
+    session: AsyncSession = None
+) -> PostgreSQLAgentHealthRepository:
+    """Get agent health repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLAgentHealthRepository(session)
+    return PostgreSQLAgentHealthRepository(session)
+
+
+async def get_health_incident_repository(
+    session: AsyncSession = None
+) -> PostgreSQLHealthIncidentRepository:
+    """Get health incident repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLHealthIncidentRepository(session)
+    return PostgreSQLHealthIncidentRepository(session)
+
+
+async def get_health_monitoring_service(
+    session: AsyncSession = None
+) -> AgentHealthMonitoringService:
+    """Get health monitoring service dependency"""
+    health_repo = await get_health_repository(session)
+    incident_repo = await get_health_incident_repository(session)
+    return AgentHealthMonitoringService(
+        health_repository=health_repo,
+        incident_repository=incident_repo,
+    )
+
+
+# ==================== Phase 3: Cost Governance Dependencies ====================
+
+async def get_budget_repository(
+    session: AsyncSession = None
+) -> PostgreSQLWorkflowBudgetRepository:
+    """Get workflow budget repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLWorkflowBudgetRepository(session)
+    return PostgreSQLWorkflowBudgetRepository(session)
+
+
+async def get_cost_tracking_repository(
+    session: AsyncSession = None
+) -> PostgreSQLCostTrackingRepository:
+    """Get cost tracking repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLCostTrackingRepository(session)
+    return PostgreSQLCostTrackingRepository(session)
+
+
+async def get_cost_governance_service(
+    session: AsyncSession = None
+) -> CostGovernanceService:
+    """Get cost governance service dependency"""
+    budget_repo = await get_budget_repository(session)
+    cost_tracking_repo = await get_cost_tracking_repository(session)
+    return CostGovernanceService(
+        budget_repository=budget_repo,
+        cost_tracking_repository=cost_tracking_repo,
+    )
