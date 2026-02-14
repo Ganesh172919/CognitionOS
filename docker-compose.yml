@@ -239,6 +239,44 @@ services:
       - postgres
     restart: unless-stopped
 
+  # V3 API Service (Clean Architecture)
+  api-v3:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: cognitionos-api-v3
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8100
+      - API_DEBUG=false
+      - API_LOG_LEVEL=info
+      - API_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=cognitionos
+      - DB_USERNAME=cognition
+      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USERNAME=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASS:-guest}
+      - LLM_OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SECURITY_SECRET_KEY=${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      - ENVIRONMENT=development
+    ports:
+      - "8100:8100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
