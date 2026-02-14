@@ -32,6 +32,7 @@ from . import execution
 from . import checkpoint
 from . import health_monitoring
 from . import cost_governance
+from . import memory_hierarchy
 
 __all__ = [
     "workflow",
@@ -42,6 +43,7 @@ __all__ = [
     "checkpoint",
     "health_monitoring",
     "cost_governance",
+    "memory_hierarchy",
 ]
 
 __version__ = "3.1.0"  # Phase 3 Extended Agent Operation

@@ -21,6 +21,7 @@ from . import agent
 from . import checkpoint
 from . import health_monitoring
 from . import cost_governance
+from . import memory_hierarchy
 
 __all__ = [
     "workflow",
@@ -28,4 +29,5 @@ __all__ = [
     "checkpoint",
     "health_monitoring",
     "cost_governance",
+    "memory_hierarchy",
 ]
