@@ -147,6 +147,10 @@ async def root():
 
 app.include_router(workflows.router)
 
+# Import and include auth routes
+from services.api.src.routes import auth
+app.include_router(auth.router)
+
 
 # ==================== Main Entry Point ====================
 

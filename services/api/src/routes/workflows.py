@@ -37,6 +37,7 @@ from services.api.src.dependencies.injection import (
     get_workflow_repository,
     get_workflow_execution_repository,
 )
+from services.api.src.auth import CurrentUser, get_current_user_optional
 
 
 router = APIRouter(prefix="/api/v3/workflows", tags=["Workflows"])

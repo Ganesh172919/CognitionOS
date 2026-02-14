@@ -2,6 +2,6 @@
 API Routes Package
 """
 
-from . import workflows
+from . import workflows, auth
 
-__all__ = ["workflows"]
+__all__ = ["workflows", "auth"]
