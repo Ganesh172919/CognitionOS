@@ -1,0 +1,24 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "CognitionOS PostgreSQL",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "cognitionos",
+      "Username": "cognition",
+      "SSLMode": "prefer",
+      "PassFile": "/tmp/pgpassfile"
+    },
+    "2": {
+      "Name": "CognitionOS PgBouncer",
+      "Group": "Servers",
+      "Host": "pgbouncer",
+      "Port": 6432,
+      "MaintenanceDB": "cognitionos",
+      "Username": "cognition",
+      "SSLMode": "prefer",
+      "PassFile": "/tmp/pgpassfile"
+    }
+  }
+}
