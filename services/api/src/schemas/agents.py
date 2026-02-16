@@ -5,7 +5,7 @@ Pydantic schemas for Agent API endpoints.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ==================== Request Schemas ====================
@@ -40,7 +40,7 @@ class RegisterAgentDefinitionRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Agent name")
     description: str = Field(..., description="Agent description")
     capabilities: List[CapabilitySchema] = Field(..., min_items=1, description="Agent capabilities")
-    model_config: ModelConfigSchema = Field(..., description="Model configuration")
+    llm_model_config: ModelConfigSchema = Field(..., description="Model configuration", alias="model_config")
     system_prompt: str = Field(..., description="System prompt template")
     budget_limits: BudgetLimitsSchema = Field(..., description="Budget limits")
     tags: List[str] = Field(default_factory=list, description="Agent tags")
@@ -101,14 +101,13 @@ class AgentDefinitionResponse(BaseModel):
     name: str
     description: str
     capabilities: List[CapabilityResponse]
-    model_config: ModelConfigResponse
+    llm_model_config: ModelConfigResponse
     system_prompt: str
     budget_limits: BudgetLimitsResponse
     tags: List[str]
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentResponse(BaseModel):
@@ -123,8 +122,7 @@ class AgentResponse(BaseModel):
     total_cost_usd: float
     total_tokens_used: int
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TaskAssignmentResponse(BaseModel):
@@ -134,8 +132,7 @@ class TaskAssignmentResponse(BaseModel):
     status: str
     assigned_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentListResponse(BaseModel):

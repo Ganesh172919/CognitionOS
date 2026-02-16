@@ -77,7 +77,7 @@ class AgentHealthStatusModel(Base):
     # Metadata
     error_message = Column(Text, nullable=True)
     recovery_attempts = Column(Integer, default=0)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Timing
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
@@ -119,7 +119,7 @@ class AgentHealthIncidentModel(Base):
     
     # Metadata
     metrics_snapshot = Column(JSONB, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     __table_args__ = (
         {'extend_existing': True}

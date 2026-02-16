@@ -6,6 +6,11 @@ This module provides pytest configuration and shared fixtures for all tests.
 
 import sys
 import os
+
+# Suppress deprecation warnings from python-multipart BEFORE any imports
+import warnings
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+
 import pytest
 import asyncio
 from typing import AsyncGenerator, Generator

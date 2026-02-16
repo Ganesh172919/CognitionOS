@@ -65,7 +65,7 @@ class WorkflowBudgetModel(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     
     # Metadata
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     __table_args__ = (
         {'extend_existing': True}
@@ -108,7 +108,7 @@ class CostTrackingModel(Base):
     # Metadata
     request_payload = Column(JSONB, nullable=True)
     response_metadata = Column(JSONB, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     __table_args__ = (
         {'extend_existing': True}

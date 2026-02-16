@@ -9,7 +9,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Integer, ARRAY, Enum a
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
-from infrastructure.persistence.database import Base
+from infrastructure.persistence.base import Base
 from core.domain.auth.entities import UserStatus
 
 

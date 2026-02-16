@@ -38,7 +38,7 @@ class CheckpointModel(Base):
     # Metadata
     checkpoint_size_bytes = Column(BigInteger, nullable=True)
     compression_enabled = Column(Boolean, default=True)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Constraints
     __table_args__ = (

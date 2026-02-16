@@ -68,6 +68,9 @@ class EventBus:
 # Global event bus instance
 _event_bus: EventBus | None = None
 
+# Alias for backward compatibility
+InMemoryEventBus = EventBus
+
 
 def init_event_bus() -> EventBus:
     """Initialize global event bus"""

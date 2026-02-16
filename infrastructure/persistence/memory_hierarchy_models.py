@@ -43,7 +43,7 @@ class WorkingMemoryModel(Base):
     # Metadata
     memory_type = Column(String(50), nullable=True)
     tags = Column(ARRAY(Text), nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Constraints
     __table_args__ = (
@@ -81,7 +81,7 @@ class EpisodicMemoryModel(Base):
     # Metadata
     temporal_period = Column(JSONB, nullable=True)
     tags = Column(ARRAY(Text), nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Constraints
     __table_args__ = (
@@ -116,7 +116,7 @@ class LongTermMemoryModel(Base):
     # Metadata
     source_type = Column(String(50), nullable=True)
     tags = Column(ARRAY(Text), nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Constraints
     __table_args__ = (
@@ -149,7 +149,7 @@ class MemoryLifecycleEventModel(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     
     # Metadata
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Constraints
     __table_args__ = (

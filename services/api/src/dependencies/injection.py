@@ -28,8 +28,8 @@ from core.application.agent.use_cases import (
     CompleteAgentTaskUseCase,
 )
 from infrastructure.persistence.workflow_repository import (
-    SQLAlchemyWorkflowRepository,
-    SQLAlchemyWorkflowExecutionRepository,
+    PostgreSQLWorkflowRepository,
+    PostgreSQLWorkflowExecutionRepository,
 )
 from infrastructure.persistence.checkpoint_repository import PostgreSQLCheckpointRepository
 from infrastructure.persistence.health_repository import (
@@ -104,48 +104,48 @@ def get_event_bus() -> InMemoryEventBus:
 
 async def get_workflow_repository(
     session: AsyncSession = None
-) -> SQLAlchemyWorkflowRepository:
+) -> PostgreSQLWorkflowRepository:
     """Get workflow repository dependency"""
     if session is None:
         async with async_session_factory() as session:
-            return SQLAlchemyWorkflowRepository(session)
-    return SQLAlchemyWorkflowRepository(session)
+            return PostgreSQLWorkflowRepository(session)
+    return PostgreSQLWorkflowRepository(session)
 
 
 async def get_workflow_execution_repository(
     session: AsyncSession = None
-) -> SQLAlchemyWorkflowExecutionRepository:
+) -> PostgreSQLWorkflowExecutionRepository:
     """Get workflow execution repository dependency"""
     if session is None:
         async with async_session_factory() as session:
-            return SQLAlchemyWorkflowExecutionRepository(session)
-    return SQLAlchemyWorkflowExecutionRepository(session)
+            return PostgreSQLWorkflowExecutionRepository(session)
+    return PostgreSQLWorkflowExecutionRepository(session)
 
 
 # ==================== Use Case Dependencies ====================
 
 def get_create_workflow_use_case(
-    workflow_repository: SQLAlchemyWorkflowRepository | None = None,
+    workflow_repository: PostgreSQLWorkflowRepository | None = None,
     event_bus: InMemoryEventBus | None = None,
 ) -> CreateWorkflowUseCase:
     """Get create workflow use case dependency"""
     if workflow_repository is None:
-        workflow_repository = SQLAlchemyWorkflowRepository(None)
+        workflow_repository = PostgreSQLWorkflowRepository(None)
     if event_bus is None:
         event_bus = get_event_bus()
     return CreateWorkflowUseCase(workflow_repository, event_bus)
 
 
 def get_execute_workflow_use_case(
-    workflow_repository: SQLAlchemyWorkflowRepository | None = None,
-    execution_repository: SQLAlchemyWorkflowExecutionRepository | None = None,
+    workflow_repository: PostgreSQLWorkflowRepository | None = None,
+    execution_repository: PostgreSQLWorkflowExecutionRepository | None = None,
     event_bus: InMemoryEventBus | None = None,
 ) -> ExecuteWorkflowUseCase:
     """Get execute workflow use case dependency"""
     if workflow_repository is None:
-        workflow_repository = SQLAlchemyWorkflowRepository(None)
+        workflow_repository = PostgreSQLWorkflowRepository(None)
     if execution_repository is None:
-        execution_repository = SQLAlchemyWorkflowExecutionRepository(None)
+        execution_repository = PostgreSQLWorkflowExecutionRepository(None)
     if event_bus is None:
         event_bus = get_event_bus()
     return ExecuteWorkflowUseCase(
@@ -156,11 +156,11 @@ def get_execute_workflow_use_case(
 
 
 def get_workflow_status_use_case(
-    execution_repository: SQLAlchemyWorkflowExecutionRepository | None = None,
+    execution_repository: PostgreSQLWorkflowExecutionRepository | None = None,
 ) -> GetWorkflowExecutionStatusUseCase:
     """Get workflow status use case dependency"""
     if execution_repository is None:
-        execution_repository = SQLAlchemyWorkflowExecutionRepository(None)
+        execution_repository = PostgreSQLWorkflowExecutionRepository(None)
     return GetWorkflowExecutionStatusUseCase(execution_repository)
 
 
