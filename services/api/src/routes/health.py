@@ -1,7 +1,8 @@
 """
 Health Monitoring API Routes
 
-Provides REST endpoints for agent health monitoring and incident management.
+Provides REST endpoints for agent health monitoring, incident management,
+and system health checks.
 """
 
 import sys
@@ -10,7 +11,7 @@ import os
 # Add core modules to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
-from typing import List
+from typing import List, Dict, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -41,6 +42,7 @@ from services.api.src.dependencies.injection import (
     get_health_repository,
     get_event_bus,
 )
+from infrastructure.health.checks import SystemHealthAggregator
 
 
 router = APIRouter(prefix="/api/v3/health", tags=["Health Monitoring"])
@@ -335,3 +337,119 @@ async def trigger_recovery(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to trigger recovery: {str(e)}"
         )
+
+
+# ==================== System Health Check Endpoints ====================
+
+@router.get(
+    "/system",
+    summary="System health check",
+    description="Comprehensive health check for all system dependencies (Redis, RabbitMQ, Database)",
+    response_model=Dict[str, Any],
+)
+async def system_health(
+    session: AsyncSession = Depends(get_db_session),
+) -> Dict[str, Any]:
+    """
+    Perform comprehensive system health check.
+    
+    Checks:
+    - Redis connectivity and performance
+    - RabbitMQ connectivity and messaging
+    - Database connectivity and query performance
+    
+    Returns overall status (healthy/degraded/unhealthy) with details.
+    """
+    try:
+        from core.config import get_config
+        config = get_config()
+        
+        # Get Redis and RabbitMQ URLs from config
+        redis_url = config.redis.url if hasattr(config, 'redis') else "redis://localhost:6379/0"
+        rabbitmq_url = config.rabbitmq.url if hasattr(config, 'rabbitmq') else "amqp://guest:guest@localhost:5672/"
+        
+        # Create health aggregator
+        health_aggregator = SystemHealthAggregator(
+            redis_url=redis_url,
+            rabbitmq_url=rabbitmq_url,
+        )
+        
+        # Perform all health checks
+        result = await health_aggregator.check_all(session)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to perform system health check: {str(e)}"
+        )
+
+
+@router.get(
+    "/ready",
+    summary="Readiness probe",
+    description="Kubernetes readiness probe - checks if system is ready to accept traffic",
+    status_code=status.HTTP_200_OK,
+)
+async def readiness_probe(
+    session: AsyncSession = Depends(get_db_session),
+) -> Dict[str, Any]:
+    """
+    Readiness probe for Kubernetes.
+    
+    Returns 200 if system is ready to accept traffic, 503 otherwise.
+    """
+    try:
+        from core.config import get_config
+        config = get_config()
+        
+        redis_url = config.redis.url if hasattr(config, 'redis') else "redis://localhost:6379/0"
+        rabbitmq_url = config.rabbitmq.url if hasattr(config, 'rabbitmq') else "amqp://guest:guest@localhost:5672/"
+        
+        health_aggregator = SystemHealthAggregator(
+            redis_url=redis_url,
+            rabbitmq_url=rabbitmq_url,
+        )
+        
+        result = await health_aggregator.check_all(session)
+        
+        # Service is ready if not unhealthy
+        if result["status"] == "unhealthy":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="System is not ready"
+            )
+        
+        return {
+            "status": "ready",
+            "timestamp": result["timestamp"],
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Readiness check failed: {str(e)}"
+        )
+
+
+@router.get(
+    "/live",
+    summary="Liveness probe",
+    description="Kubernetes liveness probe - checks if application is alive",
+    status_code=status.HTTP_200_OK,
+)
+async def liveness_probe() -> Dict[str, str]:
+    """
+    Liveness probe for Kubernetes.
+    
+    Simple check to verify the application is alive and responding.
+    Returns 200 if alive, indicating Kubernetes should not restart the pod.
+    """
+    from datetime import datetime
+    return {
+        "status": "alive",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
