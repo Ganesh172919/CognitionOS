@@ -1,0 +1,105 @@
+# Prometheus Configuration for CognitionOS V4
+# Phase 5.1: Monitoring & Observability
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'cognitionos'
+    environment: 'development'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "prometheus-alerts.yml"
+  - "prometheus-slo.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # CognitionOS V3 API Service
+  - job_name: 'api-v3'
+    static_configs:
+      - targets: ['api-v3:8100']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Auth Service
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Task Planner
+  - job_name: 'task-planner'
+    static_configs:
+      - targets: ['task-planner:8002']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Agent Orchestrator
+  - job_name: 'agent-orchestrator'
+    static_configs:
+      - targets: ['agent-orchestrator:8003']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Memory Service
+  - job_name: 'memory-service'
+    static_configs:
+      - targets: ['memory-service:8004']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # AI Runtime
+  - job_name: 'ai-runtime'
+    static_configs:
+      - targets: ['ai-runtime:8005']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Tool Runner
+  - job_name: 'tool-runner'
+    static_configs:
+      - targets: ['tool-runner:8006']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # PostgreSQL Exporter (optional, requires postgres_exporter)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+
+  # Redis Exporter (optional, requires redis_exporter)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+  # RabbitMQ
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # PgBouncer (optional, requires pgbouncer_exporter)
+  # - job_name: 'pgbouncer'
+  #   static_configs:
+  #     - targets: ['pgbouncer-exporter:9127']

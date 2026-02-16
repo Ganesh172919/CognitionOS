@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-v3
+  namespace: cognitionos
+  labels:
+    app: api-v3
+    component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-v3
+  template:
+    metadata:
+      labels:
+        app: api-v3
+        component: api
+    spec:
+      containers:
+      - name: api-v3
+        image: cognitionos/api-v3:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8100
+          protocol: TCP
+        env:
+        - name: API_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: cognitionos-config
+              key: API_HOST
+        - name: API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: cognitionos-config
+              key: API_PORT
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cognitionos-secrets
+              key: db-password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cognitionos-secrets
+              key: jwt-secret
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cognitionos-secrets
+              key: openai-api-key
+        envFrom:
+        - configMapRef:
+            name: cognitionos-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v3-service
+  namespace: cognitionos
+  labels:
+    app: api-v3
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8100
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: api-v3
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-v3-hpa
+  namespace: cognitionos
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-v3
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max

@@ -1,0 +1,123 @@
+# CognitionOS V4 - SLO Recording Rules
+# Phase 5.4: SLO Tracking
+
+groups:
+  - name: slo_recording_rules
+    interval: 30s
+    rules:
+      # Availability SLO: 99.9% uptime
+      - record: slo:availability:ratio
+        expr: |
+          sum(up{job=~"api-v3|api-gateway|task-planner|agent-orchestrator"})
+          /
+          count(up{job=~"api-v3|api-gateway|task-planner|agent-orchestrator"})
+          
+      # Latency SLO: 95% of requests < 300ms
+      - record: slo:latency:ratio
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="0.3"}[5m]))
+          /
+          sum(rate(http_request_duration_seconds_count[5m]))
+          
+      # Error Rate SLO: < 0.5% errors
+      - record: slo:error_rate:ratio
+        expr: |
+          1 - (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          )
+          
+      # Cache Hit Rate SLO: > 80%
+      - record: slo:cache_hit_rate:ratio
+        expr: |
+          sum(llm_cache_hits) / sum(llm_requests_total)
+          
+      # Cost Efficiency SLO: 70% cost reduction through caching
+      - record: slo:cost_efficiency:ratio
+        expr: |
+          (sum(llm_cache_hits) * 0.002) / (sum(llm_requests_total) * 0.002)
+
+  - name: slo_burn_rate
+    interval: 1m
+    rules:
+      # Fast burn rate (1 hour window) - critical
+      - record: slo:availability:burn_rate_1h
+        expr: |
+          (1 - slo:availability:ratio)
+          /
+          (1 - 0.999)
+          
+      # Medium burn rate (6 hour window) - warning
+      - record: slo:availability:burn_rate_6h
+        expr: |
+          (1 - avg_over_time(slo:availability:ratio[6h]))
+          /
+          (1 - 0.999)
+          
+      # Latency burn rate
+      - record: slo:latency:burn_rate_1h
+        expr: |
+          (1 - slo:latency:ratio)
+          /
+          (1 - 0.95)
+          
+      # Error rate burn rate
+      - record: slo:error_rate:burn_rate_1h
+        expr: |
+          (1 - slo:error_rate:ratio)
+          /
+          (1 - 0.995)
+
+  - name: slo_alerts
+    interval: 1m
+    rules:
+      - alert: AvailabilitySLOBurnRateCritical
+        expr: slo:availability:burn_rate_1h > 14.4
+        for: 2m
+        labels:
+          severity: critical
+          component: slo
+        annotations:
+          summary: "Availability SLO burn rate critical"
+          description: "99.9% SLO will be exhausted in < 24 hours at current rate"
+          
+      - alert: AvailabilitySLOBurnRateWarning
+        expr: slo:availability:burn_rate_6h > 6
+        for: 15m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "Availability SLO burn rate high"
+          description: "99.9% SLO consumption rate elevated"
+          
+      - alert: LatencySLOViolation
+        expr: slo:latency:ratio < 0.95
+        for: 5m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "Latency SLO violated"
+          description: "Only {{ $value | humanizePercentage }} requests under 300ms (target: 95%)"
+          
+      - alert: ErrorRateSLOViolation
+        expr: slo:error_rate:ratio < 0.995
+        for: 5m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "Error rate SLO violated"
+          description: "Error rate at {{ $value | humanizePercentage }} (target: 99.5%)"
+          
+      - alert: CacheHitRateSLOViolation
+        expr: slo:cache_hit_rate:ratio < 0.80
+        for: 10m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "Cache hit rate SLO violated"
+          description: "Cache hit rate at {{ $value | humanizePercentage }} (target: 80%)"

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cognitionos-config
+  namespace: cognitionos
+data:
+  # API Configuration
+  API_HOST: "0.0.0.0"
+  API_PORT: "8100"
+  API_DEBUG: "false"
+  API_LOG_LEVEL: "info"
+  
+  # Database Configuration
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_DATABASE: "cognitionos"
+  
+  # Redis Configuration
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  
+  # RabbitMQ Configuration
+  RABBITMQ_HOST: "rabbitmq-service"
+  RABBITMQ_PORT: "5672"
+  
+  # Environment
+  ENVIRONMENT: "production"
