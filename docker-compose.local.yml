@@ -1,0 +1,122 @@
+# Docker Compose for Localhost Development
+# Optimized for fast startup, hot-reload, and easy debugging
+# Usage: docker-compose -f docker-compose.local.yml up
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: cognitionos-postgres-local
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: cognitionos_dev
+      POSTGRES_USER: cognition_dev
+      POSTGRES_PASSWORD: dev_password_local
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognition_dev -d cognitionos_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cognitionos-local
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cognitionos-redis-local
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_local:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - cognitionos-local
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: cognitionos-rabbitmq-local
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data_local:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cognitionos-local
+
+  # API Service (Development Mode)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: cognitionos-api-local
+    ports:
+      - "8100:8100"
+      - "5678:5678"  # Debugpy port for remote debugging
+    environment:
+      - ENVIRONMENT=development
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
+    volumes:
+      # Mount source code for hot-reload
+      - ./services/api:/app/services/api:delegated
+      - ./core:/app/core:delegated
+      - ./infrastructure:/app/infrastructure:delegated
+      - ./shared:/app/shared:delegated
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for services...' &&
+        sleep 5 &&
+        echo 'Running migrations...' &&
+        python -m alembic upgrade head || echo 'Migrations skipped' &&
+        echo 'Starting API server with hot-reload...' &&
+        uvicorn services.api.src.main:app --host 0.0.0.0 --port 8100 --reload --log-level debug
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/api/v3/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - cognitionos-local
+
+volumes:
+  postgres_data_local:
+    driver: local
+  redis_data_local:
+    driver: local
+  rabbitmq_data_local:
+    driver: local
+
+networks:
+  cognitionos-local:
+    driver: bridge
