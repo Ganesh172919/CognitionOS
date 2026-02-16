@@ -5,7 +5,7 @@ Application layer use cases for Agent bounded context.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID, uuid4
 
 from core.domain.agent import (
