@@ -225,16 +225,19 @@ class BulkheadIsolation:
         """Execute function with bulkhead isolation"""
         self.total_requests += 1
         
-        if not self.semaphore.locked():
+        try:
             async with self.semaphore:
                 self.active_requests += 1
                 try:
                     return await func(*args, **kwargs)
                 finally:
                     self.active_requests -= 1
-        else:
+        except Exception as e:
+            # If semaphore acquisition fails or function fails
             self.rejected_requests += 1
-            raise BulkheadFullError(f"Bulkhead {self.name} is full")
+            if isinstance(e, BulkheadFullError):
+                raise
+            raise BulkheadFullError(f"Bulkhead {self.name} is full") from e
     
     def get_metrics(self) -> Dict[str, Any]:
         """Get bulkhead metrics"""

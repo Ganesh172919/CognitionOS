@@ -20,11 +20,12 @@ CREATE TABLE IF NOT EXISTS llm_cache (
     accessed_at TIMESTAMP NOT NULL DEFAULT NOW(),
     access_count INTEGER NOT NULL DEFAULT 1,
     ttl_seconds INTEGER NOT NULL DEFAULT 3600,
-    metadata JSONB,
-    INDEX idx_llm_cache_model (model),
-    INDEX idx_llm_cache_created_at (created_at),
-    INDEX idx_llm_cache_request_hash (request_hash)
+    metadata JSONB
 );
+
+CREATE INDEX IF NOT EXISTS idx_llm_cache_model ON llm_cache(model);
+CREATE INDEX IF NOT EXISTS idx_llm_cache_created_at ON llm_cache(created_at);
+CREATE INDEX IF NOT EXISTS idx_llm_cache_request_hash ON llm_cache(request_hash);
 
 -- L3: Semantic similarity cache with pgvector
 CREATE TABLE IF NOT EXISTS llm_semantic_cache (

@@ -219,7 +219,7 @@ class L2DatabaseCache:
             if not result:
                 return None
             
-            # Update access count and time
+            # Update access count and time atomically
             await self.db.execute("""
                 UPDATE llm_cache
                 SET accessed_at = NOW(), access_count = access_count + 1
