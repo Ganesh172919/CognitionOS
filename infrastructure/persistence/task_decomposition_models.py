@@ -54,7 +54,7 @@ class TaskDecompositionModel(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
     # Metadata
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Relationship to task nodes
     task_nodes = relationship(
@@ -105,7 +105,7 @@ class TaskNodeModel(Base):
     
     # Tags and metadata
     tags = Column(ARRAY(String), default=list)
-    metadata = Column(JSONB, nullable=True)
+    checkpoint_metadata = Column(JSONB, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)

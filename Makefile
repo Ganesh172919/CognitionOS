@@ -225,3 +225,66 @@ logs-api: ## View API logs
 logs-db: ## View database logs
 	$(COMPOSE) logs -f postgres
 
+
+# ============================================
+# LOCALHOST DEVELOPMENT COMMANDS
+# ============================================
+
+.PHONY: setup-local
+setup-local:
+@echo "🏠 Setting up localhost environment..."
+@./scripts/setup-localhost.sh
+
+.PHONY: start-local
+start-local:
+@echo "🚀 Starting localhost services..."
+@docker-compose -f docker-compose.local.yml up -d
+@echo "✅ Services started!"
+@echo "API: http://localhost:8100"
+@echo "Docs: http://localhost:8100/docs"
+
+.PHONY: stop-local
+stop-local:
+@echo "🛑 Stopping localhost services..."
+@docker-compose -f docker-compose.local.yml down
+@echo "✅ Services stopped"
+
+.PHONY: restart-local
+restart-local:
+@echo "🔄 Restarting localhost services..."
+@docker-compose -f docker-compose.local.yml restart
+@echo "✅ Services restarted"
+
+.PHONY: logs-local
+logs-local:
+@docker-compose -f docker-compose.local.yml logs -f
+
+.PHONY: logs-api-local
+logs-api-local:
+@docker-compose -f docker-compose.local.yml logs -f api
+
+.PHONY: clean-local
+clean-local:
+@echo "🧹 Cleaning localhost environment..."
+@docker-compose -f docker-compose.local.yml down -v
+@echo "✅ Cleanup complete"
+
+.PHONY: test-local
+test-local:
+@echo "🧪 Running tests in localhost..."
+@docker exec -it cognitionos-api-local pytest
+
+.PHONY: shell-api-local
+shell-api-local:
+@echo "🐚 Opening API container shell..."
+@docker exec -it cognitionos-api-local bash
+
+.PHONY: shell-db-local
+shell-db-local:
+@echo "🐚 Opening database shell..."
+@docker exec -it cognitionos-postgres-local psql -U cognition_dev -d cognitionos_dev
+
+.PHONY: health-local
+health-local:
+@echo "🏥 Checking localhost health..."
+@curl -s http://localhost:8100/api/v3/health/system | jq '.' || echo "API not responding"

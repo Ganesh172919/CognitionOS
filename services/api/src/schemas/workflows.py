@@ -7,7 +7,7 @@ These schemas handle request/response validation and serialization.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 # ==================== Request Schemas ====================
@@ -93,8 +93,7 @@ class WorkflowResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkflowExecutionResponse(BaseModel):
@@ -110,8 +109,7 @@ class WorkflowExecutionResponse(BaseModel):
     completed_at: Optional[datetime]
     user_id: Optional[UUID]
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StepExecutionResponse(BaseModel):
@@ -128,8 +126,7 @@ class StepExecutionResponse(BaseModel):
     completed_at: Optional[datetime]
     retry_count: int
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkflowListResponse(BaseModel):

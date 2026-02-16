@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.src.auth import (
     verify_password,
@@ -24,6 +25,9 @@ from services.api.src.auth import (
     CurrentUser,
     get_current_user,
 )
+from services.api.src.dependencies.injection import get_db_session
+from core.domain.auth.entities import User
+from infrastructure.persistence.auth_repository import PostgresUserRepository
 
 
 router = APIRouter(prefix="/api/v3/auth", tags=["Authentication"])
@@ -65,32 +69,11 @@ class UserResponse(BaseModel):
     full_name: Optional[str] = Field(default=None, description="User's full name")
 
 
-# ==================== In-Memory User Store (Temporary) ====================
-# TODO: Replace with database persistence
+# ==================== Database Dependency ====================
 
-_users_db: dict[str, dict] = {}
-_user_counter = 1
-
-
-def _get_next_user_id() -> str:
-    """Get next user ID"""
-    global _user_counter
-    user_id = f"user_{_user_counter}"
-    _user_counter += 1
-    return user_id
-
-
-def _get_user_by_email(email: str) -> Optional[dict]:
-    """Get user by email"""
-    for user in _users_db.values():
-        if user["email"] == email:
-            return user
-    return None
-
-
-def _get_user_by_id(user_id: str) -> Optional[dict]:
-    """Get user by ID"""
-    return _users_db.get(user_id)
+async def get_user_repository(session: AsyncSession = Depends(get_db_session)) -> PostgresUserRepository:
+    """Get user repository"""
+    return PostgresUserRepository(session)
 
 
 # ==================== Authentication Endpoints ====================
@@ -102,36 +85,37 @@ def _get_user_by_id(user_id: str) -> Optional[dict]:
     summary="Register a new user",
     description="Create a new user account with email and password",
 )
-async def register(request: RegisterRequest) -> UserResponse:
+async def register(
+    request: RegisterRequest,
+    user_repo: PostgresUserRepository = Depends(get_user_repository),
+    session: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
     """Register a new user"""
     
     # Check if user already exists
-    if _get_user_by_email(request.email):
+    if await user_repo.exists_by_email(request.email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with this email already exists"
         )
     
     # Create new user
-    user_id = _get_next_user_id()
     hashed_password = get_password_hash(request.password)
+    user = User.create(
+        email=request.email,
+        password_hash=hashed_password,
+        full_name=request.full_name,
+    )
     
-    user = {
-        "user_id": user_id,
-        "email": request.email,
-        "hashed_password": hashed_password,
-        "full_name": request.full_name,
-        "roles": ["user"],  # Default role
-        "is_active": True,
-    }
-    
-    _users_db[user_id] = user
+    # Save to database
+    created_user = await user_repo.create(user)
+    await session.commit()
     
     return UserResponse(
-        user_id=user_id,
-        email=request.email,
-        roles=user["roles"],
-        full_name=request.full_name,
+        user_id=str(created_user.user_id),
+        email=created_user.email,
+        roles=created_user.roles,
+        full_name=created_user.full_name,
     )
 
 
@@ -141,11 +125,15 @@ async def register(request: RegisterRequest) -> UserResponse:
     summary="User login",
     description="Authenticate user and receive access and refresh tokens",
 )
-async def login(request: LoginRequest) -> TokenResponse:
+async def login(
+    request: LoginRequest,
+    user_repo: PostgresUserRepository = Depends(get_user_repository),
+    session: AsyncSession = Depends(get_db_session),
+) -> TokenResponse:
     """Authenticate user and return tokens"""
     
     # Find user
-    user = _get_user_by_email(request.email)
+    user = await user_repo.find_by_email(request.email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -154,7 +142,12 @@ async def login(request: LoginRequest) -> TokenResponse:
         )
     
     # Verify password
-    if not verify_password(request.password, user["hashed_password"]):
+    if not verify_password(request.password, user.password_hash):
+        # Record failed login attempt
+        user.record_failed_login()
+        await user_repo.update(user)
+        await session.commit()
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -162,17 +155,22 @@ async def login(request: LoginRequest) -> TokenResponse:
         )
     
     # Check if user is active
-    if not user.get("is_active", True):
+    if not user.is_active():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            detail="User account is inactive or locked"
         )
+    
+    # Record successful login
+    user.record_login()
+    await user_repo.update(user)
+    await session.commit()
     
     # Create tokens
     token_data = {
-        "sub": user["user_id"],
-        "email": user["email"],
-        "roles": user["roles"],
+        "sub": str(user.user_id),
+        "email": user.email,
+        "roles": user.roles,
     }
     
     access_token = create_access_token(token_data)
@@ -196,7 +194,10 @@ async def login(request: LoginRequest) -> TokenResponse:
     summary="Refresh access token",
     description="Use refresh token to obtain a new access token",
 )
-async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
+async def refresh_token(
+    request: RefreshTokenRequest,
+    user_repo: PostgresUserRepository = Depends(get_user_repository),
+) -> TokenResponse:
     """Refresh access token"""
     
     # Verify refresh token
@@ -209,8 +210,9 @@ async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
         )
     
     # Get user
-    user_id = payload.get("sub")
-    user = _get_user_by_id(user_id)
+    from uuid import UUID
+    user_id = UUID(payload.get("sub"))
+    user = await user_repo.find_by_id(user_id)
     
     if not user:
         raise HTTPException(
@@ -219,21 +221,21 @@ async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
         )
     
     # Check if user is active
-    if not user.get("is_active", True):
+    if not user.is_active():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            detail="User account is inactive or locked"
         )
     
     # Create new tokens
     token_data = {
-        "sub": user["user_id"],
-        "email": user["email"],
-        "roles": user["roles"],
+        "sub": str(user.user_id),
+        "email": user.email,
+        "roles": user.roles,
     }
     
     access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
+    new_refresh_token = create_refresh_token(token_data)
     
     from core.config import get_config
     config = get_config()
@@ -241,7 +243,7 @@ async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
     
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
+        refresh_token=new_refresh_token,
         token_type="bearer",
         expires_in=expires_in,
     )
@@ -253,11 +255,15 @@ async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
     summary="Get current user",
     description="Get information about the currently authenticated user",
 )
-async def get_me(current_user: CurrentUser = Depends(get_current_user)) -> UserResponse:
+async def get_me(
+    current_user: CurrentUser = Depends(get_current_user),
+    user_repo: PostgresUserRepository = Depends(get_user_repository),
+) -> UserResponse:
     """Get current user information"""
     
     # Get full user data from database
-    user = _get_user_by_id(current_user.user_id)
+    from uuid import UUID
+    user = await user_repo.find_by_id(UUID(current_user.user_id))
     
     if not user:
         raise HTTPException(
@@ -266,8 +272,8 @@ async def get_me(current_user: CurrentUser = Depends(get_current_user)) -> UserR
         )
     
     return UserResponse(
-        user_id=user["user_id"],
-        email=user["email"],
-        roles=user["roles"],
-        full_name=user.get("full_name"),
+        user_id=str(user.user_id),
+        email=user.email,
+        roles=user.roles,
+        full_name=user.full_name,
     )
