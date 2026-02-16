@@ -448,8 +448,8 @@ async def liveness_probe() -> Dict[str, str]:
     Simple check to verify the application is alive and responding.
     Returns 200 if alive, indicating Kubernetes should not restart the pod.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
     return {
         "status": "alive",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }

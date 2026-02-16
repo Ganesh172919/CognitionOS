@@ -5,7 +5,7 @@ Core domain entities for user authentication and authorization.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -118,7 +118,6 @@ class User:
         
         # Lock account after 5 failed attempts
         if self.failed_login_attempts >= 5:
-            from datetime import timedelta
             self.suspend(until=datetime.utcnow() + timedelta(minutes=30))
     
     def update_password(self, new_password_hash: str) -> None:

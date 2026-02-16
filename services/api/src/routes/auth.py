@@ -25,6 +25,7 @@ from services.api.src.auth import (
     CurrentUser,
     get_current_user,
 )
+from services.api.src.dependencies.injection import get_db_session
 from core.domain.auth.entities import User
 from infrastructure.persistence.auth_repository import PostgresUserRepository
 
@@ -69,13 +70,6 @@ class UserResponse(BaseModel):
 
 
 # ==================== Database Dependency ====================
-
-async def get_db_session() -> AsyncSession:
-    """Get database session (import from dependencies)"""
-    from services.api.src.dependencies.injection import get_db_session as get_session
-    async for session in get_session():
-        yield session
-
 
 async def get_user_repository(session: AsyncSession = Depends(get_db_session)) -> PostgresUserRepository:
     """Get user repository"""

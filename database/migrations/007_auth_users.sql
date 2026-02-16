@@ -114,8 +114,13 @@ $$ LANGUAGE plpgsql;
 
 -- ==================== Initial Data ====================
 
+-- ⚠️ SECURITY WARNING: Default credentials for development/testing only!
+-- These accounts have weak passwords and MUST be changed or disabled in production.
+-- Consider using environment variables or secure configuration management instead.
+
 -- Create default admin user (password: 'admin123' - CHANGE IN PRODUCTION!)
 -- Password hash for 'admin123' using bcrypt
+-- TODO: Remove or disable this account before production deployment
 INSERT INTO users (user_id, email, password_hash, full_name, roles, status, email_verified)
 VALUES (
     'a0000000-0000-0000-0000-000000000001'::uuid,
@@ -130,6 +135,7 @@ ON CONFLICT (email) DO NOTHING;
 
 
 -- Create test user (password: 'testuser123' - FOR TESTING ONLY!)
+-- TODO: Remove this account before production deployment
 INSERT INTO users (user_id, email, password_hash, full_name, roles, status, email_verified)
 VALUES (
     'b0000000-0000-0000-0000-000000000001'::uuid,
