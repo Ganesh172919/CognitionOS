@@ -1,0 +1,211 @@
+# CognitionOS V4 - Prometheus Alert Rules
+# Phase 5.4: Operational Excellence
+
+groups:
+  - name: service_health
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"api-v3|api-gateway|task-planner|agent-orchestrator|ai-runtime|memory-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been down for more than 1 minute"
+          
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          /
+          sum(rate(http_requests_total[5m])) by (job)
+          * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "{{ $labels.job }} has {{ $value | humanize }}% error rate (threshold: 5%)"
+          
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (job, le)
+          ) * 1000 > 3000
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High P95 latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} P95 latency is {{ $value | humanize }}ms (threshold: 3000ms)"
+
+  - name: llm_performance
+    interval: 1m
+    rules:
+      - alert: LowCacheHitRate
+        expr: |
+          sum(llm_cache_hits) / sum(llm_requests_total) * 100 < 50
+        for: 10m
+        labels:
+          severity: warning
+          component: caching
+        annotations:
+          summary: "Low LLM cache hit rate"
+          description: "Cache hit rate is {{ $value | humanize }}% (threshold: 50%)"
+          
+      - alert: HighLLMCost
+        expr: |
+          sum(rate(llm_cost_usd_total[1h])) * 3600 > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: cost
+        annotations:
+          summary: "High LLM cost per hour"
+          description: "LLM cost is ${{ $value | humanize }}/hour (threshold: $10/hour)"
+          
+      - alert: LLMProviderFailure
+        expr: |
+          sum(rate(llm_requests_total{status="error"}[5m])) by (provider)
+          /
+          sum(rate(llm_requests_total[5m])) by (provider)
+          > 0.5
+        for: 5m
+        labels:
+          severity: critical
+          component: llm
+        annotations:
+          summary: "LLM provider {{ $labels.provider }} failing"
+          description: "{{ $labels.provider }} has {{ $value | humanizePercentage }} failure rate"
+
+  - name: cost_budget
+    interval: 1m
+    rules:
+      - alert: BudgetSoftLimitExceeded
+        expr: user_budget_used / user_budget_total > 0.8
+        for: 1m
+        labels:
+          severity: warning
+          component: budget
+        annotations:
+          summary: "User {{ $labels.user_id }} budget soft limit exceeded"
+          description: "Budget utilization at {{ $value | humanizePercentage }}"
+          
+      - alert: BudgetHardLimitExceeded
+        expr: user_budget_used / user_budget_total >= 1.0
+        for: 1m
+        labels:
+          severity: critical
+          component: budget
+        annotations:
+          summary: "User {{ $labels.user_id }} budget hard limit exceeded"
+          description: "Budget fully utilized, requests will be blocked"
+
+  - name: database
+    interval: 30s
+    rules:
+      - alert: HighDatabaseConnections
+        expr: db_connections_active > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High number of active database connections"
+          description: "{{ $value }} active connections (threshold: 80)"
+          
+      - alert: SlowDatabaseQueries
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(db_query_duration_seconds_bucket[5m])) by (operation, le)
+          ) * 1000 > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "{{ $labels.operation }} P95 is {{ $value | humanize }}ms (threshold: 100ms)"
+
+  - name: circuit_breaker
+    interval: 30s
+    rules:
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: resilience
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} is open"
+          description: "Circuit breaker has opened, requests are being rejected"
+          
+      - alert: HighRejectionRate
+        expr: |
+          sum(rate(circuit_breaker_rejected[5m])) by (name)
+          /
+          sum(rate(circuit_breaker_total[5m])) by (name)
+          > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          component: resilience
+        annotations:
+          summary: "High rejection rate on {{ $labels.name }}"
+          description: "{{ $value | humanizePercentage }} of requests are being rejected"
+
+  - name: workflow_execution
+    interval: 1m
+    rules:
+      - alert: WorkflowFailureRate
+        expr: |
+          sum(rate(workflow_executions_total{status="failed"}[10m]))
+          /
+          sum(rate(workflow_executions_total[10m]))
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: workflow
+        annotations:
+          summary: "High workflow failure rate"
+          description: "{{ $value | humanizePercentage }} of workflows are failing"
+          
+      - alert: LongRunningWorkflow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(workflow_execution_duration_seconds_bucket[5m])) by (workflow_id, le)
+          ) > 600
+        for: 10m
+        labels:
+          severity: info
+          component: workflow
+        annotations:
+          summary: "Long-running workflow detected"
+          description: "Workflow {{ $labels.workflow_id }} P95 duration is {{ $value | humanizeDuration }}"
+
+  - name: resource_usage
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "CPU usage is {{ $value | humanize }}% (threshold: 80%)"
+          
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 / 1024 > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "Memory usage is {{ $value | humanize }}GB (threshold: 2GB)"

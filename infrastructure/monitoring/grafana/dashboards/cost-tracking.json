@@ -1,0 +1,218 @@
+{
+  "dashboard": {
+    "title": "CognitionOS - Cost Tracking",
+    "uid": "cognitionos-cost-tracking",
+    "tags": ["cognitionos", "cost", "budget"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "1m",
+    "panels": [
+      {
+        "title": "Total Cost Today (USD)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [{
+          "expr": "sum(increase(llm_cost_usd_total[24h]))",
+          "refId": "A"
+        }],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 50, "color": "yellow"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Cost per Hour (USD)",
+        "type": "graph",
+        "gridPos": {"x": 6, "y": 0, "w": 18, "h": 4},
+        "targets": [{
+          "expr": "sum(rate(llm_cost_usd_total[1h])) * 3600",
+          "legendFormat": "Cost/hour",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "currencyUSD", "label": "USD/hour"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "name": "High Hourly Cost",
+          "conditions": [{
+            "evaluator": {"type": "gt", "params": [10]},
+            "operator": {"type": "and"},
+            "query": {"params": ["A", "5m", "now"]},
+            "reducer": {"type": "avg"},
+            "type": "query"
+          }],
+          "message": "Hourly cost exceeded $10"
+        }
+      },
+      {
+        "title": "Cost by Provider",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 4, "w": 8, "h": 6},
+        "targets": [{
+          "expr": "sum(increase(llm_cost_usd_total[24h])) by (provider)",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }],
+        "options": {
+          "pieType": "donut",
+          "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "title": "Cost by Model",
+        "type": "piechart",
+        "gridPos": {"x": 8, "y": 4, "w": 8, "h": 6},
+        "targets": [{
+          "expr": "sum(increase(llm_cost_usd_total[24h])) by (model)",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }],
+        "options": {
+          "pieType": "donut",
+          "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "title": "Cost Savings from Cache",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 4, "w": 8, "h": 6},
+        "targets": [{
+          "expr": "(sum(llm_cache_hits) * 0.002) / (sum(llm_requests_total) * 0.002)",
+          "refId": "A"
+        }],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "red"},
+                {"value": 50, "color": "yellow"},
+                {"value": 70, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Budget Utilization",
+        "type": "bargauge",
+        "gridPos": {"x": 0, "y": 10, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "user_budget_used / user_budget_total * 100",
+          "legendFormat": "User {{user_id}}",
+          "refId": "A"
+        }],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 80, "color": "yellow"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Budget Alerts",
+        "type": "table",
+        "gridPos": {"x": 12, "y": 10, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "budget_alert_triggered",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }],
+        "transformations": [{
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "user_id": "User",
+              "alert_type": "Alert Type",
+              "Value": "Triggered"
+            }
+          }
+        }]
+      },
+      {
+        "title": "Cost Trend (7 days)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 24, "h": 6},
+        "targets": [{
+          "expr": "sum(increase(llm_cost_usd_total[1d]))",
+          "legendFormat": "Daily Cost",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "currencyUSD", "label": "Cost (USD)"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Token Cost Breakdown",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 22, "w": 24, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(rate(llm_cost_usd_total{token_type=\"prompt\"}[5m])) * 60",
+            "legendFormat": "Prompt Tokens Cost",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(llm_cost_usd_total{token_type=\"completion\"}[5m])) * 60",
+            "legendFormat": "Completion Tokens Cost",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "currencyUSD", "label": "USD/minute"},
+          {"format": "short"}
+        ]
+      }
+    ]
+  }
+}

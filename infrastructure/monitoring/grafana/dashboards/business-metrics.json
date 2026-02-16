@@ -1,0 +1,182 @@
+{
+  "dashboard": {
+    "title": "CognitionOS - Business Metrics",
+    "uid": "cognitionos-business-metrics",
+    "tags": ["cognitionos", "business", "metrics"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "1m",
+    "panels": [
+      {
+        "title": "Active Workflows",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [{
+          "expr": "workflows_in_progress",
+          "refId": "A"
+        }],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 50, "color": "yellow"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Workflows Created (24h)",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "targets": [{
+          "expr": "sum(increase(workflows_created_total[24h]))",
+          "refId": "A"
+        }],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "title": "Tasks Completed (24h)",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "targets": [{
+          "expr": "sum(increase(workflow_steps_executed_total{status=\"completed\"}[24h]))",
+          "refId": "A"
+        }],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "title": "Success Rate (24h)",
+        "type": "gauge",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [{
+          "expr": "sum(increase(workflow_executions_total{status=\"completed\"}[24h])) / sum(increase(workflow_executions_total[24h])) * 100",
+          "refId": "A"
+        }],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "red"},
+                {"value": 80, "color": "yellow"},
+                {"value": 95, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Workflow Execution Duration (P95)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "histogram_quantile(0.95, sum(rate(workflow_execution_duration_seconds_bucket[5m])) by (workflow_id, le))",
+          "legendFormat": "{{workflow_id}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "s", "label": "Duration (seconds)"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Workflow Status Distribution",
+        "type": "piechart",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "sum(workflow_executions_total) by (status)",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }],
+        "options": {
+          "pieType": "donut",
+          "legend": {"displayMode": "table", "placement": "right"}
+        }
+      },
+      {
+        "title": "Agent Task Assignments",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 10, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "sum(agent_tasks_assigned) by (agent_id)",
+          "legendFormat": "{{agent_id}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "short", "label": "Tasks"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Memory Usage by Tier",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 10, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(memory_items{tier=\"L1\"})",
+            "legendFormat": "L1 (Working)",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(memory_items{tier=\"L2\"})",
+            "legendFormat": "L2 (Episodic)",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(memory_items{tier=\"L3\"})",
+            "legendFormat": "L3 (Long-term)",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Memory Items"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Event Bus Activity",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 24, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(rate(events_published_total[5m])) by (event_type)",
+            "legendFormat": "Published: {{event_type}}",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(events_consumed_total[5m])) by (event_type)",
+            "legendFormat": "Consumed: {{event_type}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Events/sec"},
+          {"format": "short"}
+        ]
+      }
+    ]
+  }
+}

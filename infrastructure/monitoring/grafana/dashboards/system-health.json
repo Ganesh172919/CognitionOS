@@ -1,0 +1,175 @@
+{
+  "dashboard": {
+    "title": "CognitionOS - System Health",
+    "uid": "cognitionos-system-health",
+    "tags": ["cognitionos", "system", "health"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "title": "Service Status",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [{
+          "expr": "up{job=~\"api-v3|api-gateway|task-planner|agent-orchestrator|ai-runtime|memory-service|tool-runner\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": ["lastNotNull"],
+            "fields": "",
+            "values": false
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "value": "1", "text": "UP", "color": "green"},
+              {"type": "value", "value": "0", "text": "DOWN", "color": "red"}
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "red"},
+                {"value": 0.5, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Request Rate (req/s)",
+        "type": "graph",
+        "gridPos": {"x": 6, "y": 0, "w": 9, "h": 4},
+        "targets": [{
+          "expr": "sum(rate(http_requests_total[5m])) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Error Rate (%)",
+        "type": "graph",
+        "gridPos": {"x": 15, "y": 0, "w": 9, "h": 4},
+        "targets": [{
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (job) / sum(rate(http_requests_total[5m])) by (job) * 100",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "percent", "label": "Error %", "max": 10},
+          {"format": "short"}
+        ],
+        "alert": {
+          "name": "High Error Rate",
+          "conditions": [{
+            "evaluator": {"type": "gt", "params": [5]},
+            "operator": {"type": "and"},
+            "query": {"params": ["A", "5m", "now"]},
+            "reducer": {"type": "avg"},
+            "type": "query"
+          }],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "message": "Error rate exceeded 5%",
+          "noDataState": "no_data"
+        }
+      },
+      {
+        "title": "P95 Latency (ms)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (job, le)) * 1000",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "ms", "label": "Latency (ms)"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "name": "High P95 Latency",
+          "conditions": [{
+            "evaluator": {"type": "gt", "params": [3000]},
+            "operator": {"type": "and"},
+            "query": {"params": ["A", "5m", "now"]},
+            "reducer": {"type": "avg"},
+            "type": "query"
+          }],
+          "message": "P95 latency exceeded 3 seconds"
+        }
+      },
+      {
+        "title": "Active Connections",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "db_connections_active",
+            "legendFormat": "Active DB Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "http_requests_in_progress",
+            "legendFormat": "In-Progress Requests",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "CPU Usage (%)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 10, "w": 8, "h": 5},
+        "targets": [{
+          "expr": "rate(process_cpu_seconds_total[5m]) * 100",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "percent", "label": "CPU %", "max": 100},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Memory Usage (MB)",
+        "type": "graph",
+        "gridPos": {"x": 8, "y": 10, "w": 8, "h": 5},
+        "targets": [{
+          "expr": "process_resident_memory_bytes / 1024 / 1024",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "decmbytes", "label": "Memory (MB)"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Active Workflows",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 10, "w": 8, "h": 5},
+        "targets": [{
+          "expr": "workflows_in_progress",
+          "refId": "A"
+        }],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        }
+      }
+    ]
+  }
+}

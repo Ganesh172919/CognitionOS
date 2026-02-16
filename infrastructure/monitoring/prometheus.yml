@@ -16,7 +16,8 @@ global:
 
 # Load rules once and periodically evaluate them
 rule_files:
-  # - "alert_rules.yml"
+  - "prometheus-alerts.yml"
+  - "prometheus-slo.yml"
 
 # Scrape configurations
 scrape_configs:

@@ -1,0 +1,160 @@
+{
+  "dashboard": {
+    "title": "CognitionOS - LLM Performance",
+    "uid": "cognitionos-llm-performance",
+    "tags": ["cognitionos", "llm", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "title": "Cache Hit Rate by Layer",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(llm_cache_hits) by (layer) / sum(llm_requests_total) by (layer) * 100",
+            "legendFormat": "{{layer}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Hit Rate %", "min": 0, "max": 100},
+          {"format": "short"}
+        ],
+        "alert": {
+          "name": "Low Cache Hit Rate",
+          "conditions": [{
+            "evaluator": {"type": "lt", "params": [50]},
+            "operator": {"type": "and"},
+            "query": {"params": ["A", "5m", "now"]},
+            "reducer": {"type": "avg"},
+            "type": "query"
+          }],
+          "message": "Overall cache hit rate below 50%"
+        }
+      },
+      {
+        "title": "LLM Request Rate by Provider",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "sum(rate(llm_requests_total[5m])) by (provider, model)",
+          "legendFormat": "{{provider}}/{{model}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "LLM Latency by Layer (P95)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 6, "w": 12, "h": 6},
+        "targets": [{
+          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (layer, le)) * 1000",
+          "legendFormat": "{{layer}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "ms", "label": "P95 Latency (ms)"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Token Usage (Prompt vs Completion)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 6, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(rate(llm_tokens_used_total{token_type=\"prompt\"}[5m]))",
+            "legendFormat": "Prompt Tokens",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(llm_tokens_used_total{token_type=\"completion\"}[5m]))",
+            "legendFormat": "Completion Tokens",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Tokens/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Cost per Minute (USD)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 12, "w": 8, "h": 5},
+        "targets": [{
+          "expr": "sum(rate(llm_cost_usd_total[1m])) * 60",
+          "legendFormat": "Total Cost/min",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "currencyUSD", "label": "USD/min"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "title": "Cost by Model",
+        "type": "piechart",
+        "gridPos": {"x": 8, "y": 12, "w": 8, "h": 5},
+        "targets": [{
+          "expr": "sum(increase(llm_cost_usd_total[1h])) by (model)",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }],
+        "options": {
+          "pieType": "donut",
+          "legend": {"displayMode": "table", "placement": "right"}
+        }
+      },
+      {
+        "title": "Successful vs Failed Requests",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 12, "w": 8, "h": 5},
+        "targets": [
+          {
+            "expr": "sum(llm_requests_total{status=\"success\"})",
+            "legendFormat": "Success",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(llm_requests_total{status=\"error\"})",
+            "legendFormat": "Error",
+            "refId": "B"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "title": "Cache Performance Summary",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 17, "w": 24, "h": 6},
+        "targets": [{
+          "expr": "sum(llm_cache_hits) by (layer)",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }],
+        "transformations": [{
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "layer": "Cache Layer",
+              "Value": "Hits"
+            }
+          }
+        }]
+      }
+    ]
+  }
+}
