@@ -197,6 +197,12 @@ app.include_router(execution_persistence.router)
 from services.api.src.routes import websocket as ws_router
 app.include_router(ws_router.router)
 
+# Import and include multi-tenancy and marketplace routes
+from services.api.src.routes import tenants, subscriptions, plugins
+app.include_router(tenants.router)
+app.include_router(subscriptions.router)
+app.include_router(plugins.router)
+
 
 # ==================== Main Entry Point ====================
 
