@@ -4,9 +4,10 @@ Welcome to CognitionOS! This guide will get you up and running in 10 minutes.
 
 ## Prerequisites
 
+- Docker & Docker Compose
 - Python 3.11+
-- PostgreSQL 15+ (optional - works in-memory mode)
-- Redis 7+ (optional - for caching)
+- PostgreSQL 15+ (optional - can use Docker)
+- Redis 7+ (optional - can use Docker)
 - OpenAI or Anthropic API key (optional - has simulation mode)
 
 ## Installation
@@ -30,7 +31,28 @@ python src/main.py
 
 The service will start at `http://localhost:8001` and run in simulation mode (no database required).
 
-### Option 2: Full Stack with Docker
+### Option 2: Localhost Setup (Recommended)
+
+Run the automated localhost setup script:
+
+```bash
+# Clone the repository
+git clone https://github.com/Ganesh172919/CognitionOS.git
+cd CognitionOS
+
+# Run localhost setup
+./scripts/setup-localhost.sh
+
+# This will:
+# - Set up environment variables (.env)
+# - Start all services with docker compose
+# - Run database migrations
+# - Verify system health
+```
+
+The script will check all services and report their status.
+
+### Option 3: Full Stack with Docker
 
 ```bash
 # Clone the repository
@@ -44,14 +66,16 @@ cp .env.example .env
 nano .env
 
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # Check status
-docker-compose ps
-curl http://localhost:8000/health
+docker compose ps
+curl http://localhost:8000/health   # API Gateway
+curl http://localhost:8100/health   # V3 API
+curl http://localhost:8100/api/v3/executions/health  # P0 Execution Persistence
 ```
 
-### Option 3: Manual Setup (All Services)
+### Option 4: Manual Setup (All Services)
 
 ```bash
 # Install system dependencies
@@ -218,6 +242,23 @@ Response:
 
 ## Service Endpoints
 
+### V3 Clean Architecture API (Port 8100)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check |
+| `/api/v3/workflows` | POST | Create workflow |
+| `/api/v3/workflows` | GET | List workflows |
+| `/api/v3/workflows/execute` | POST | Execute workflow |
+| `/api/v3/workflows/executions/{id}` | GET | Get execution status |
+| `/api/v3/executions/{id}/replay` | POST | Replay execution (P0) |
+| `/api/v3/executions/{id}/resume` | POST | Resume execution (P0) |
+| `/api/v3/executions/{id}/snapshots` | GET | Get execution snapshots (P0) |
+| `/api/v3/executions/health` | GET | P0 features health check |
+| `/docs` | GET | Interactive API docs |
+
+### V1/V2 Legacy Services
+
 | Service | Port | Health Check | Purpose |
 |---------|------|--------------|---------|
 | API Gateway | 8000 | `http://localhost:8000/health` | Entry point |
@@ -231,13 +272,80 @@ Response:
 
 ### Interactive API Documentation
 
-Each service has auto-generated API docs:
+V3 API provides comprehensive interactive documentation:
+
+- **V3 API**: `http://localhost:8100/docs` (OpenAPI/Swagger)
+  - Workflow management
+  - Execution tracking
+  - P0 replay/resume endpoints
+  - Agent orchestration
+
+Legacy services also have auto-generated docs:
 
 - Auth Service: `http://localhost:8001/docs`
 - Task Planner: `http://localhost:8002/docs`
 - Agent Orchestrator: `http://localhost:8003/docs`
 - AI Runtime: `http://localhost:8005/docs`
 - Tool Runner: `http://localhost:8006/docs`
+
+## V3 API Quick Examples
+
+### Create a Workflow
+
+```bash
+curl -X POST http://localhost:8100/api/v3/workflows \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "example-workflow",
+    "version": "1.0.0",
+    "name": "Example Workflow",
+    "description": "A simple workflow example",
+    "steps": [
+      {
+        "step_id": "step1",
+        "name": "First Step",
+        "agent_capability": "general",
+        "inputs": {},
+        "depends_on": []
+      }
+    ]
+  }'
+```
+
+### Execute a Workflow
+
+```bash
+curl -X POST http://localhost:8100/api/v3/workflows/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "example-workflow",
+    "version": "1.0.0",
+    "inputs": {}
+  }'
+```
+
+### Replay an Execution (P0)
+
+```bash
+curl -X POST http://localhost:8100/api/v3/executions/{execution_id}/replay \
+  -H "Content-Type: application/json" \
+  -d '{
+    "replay_mode": "full",
+    "use_cached_outputs": true
+  }'
+```
+
+### Resume a Failed Execution (P0)
+
+```bash
+curl -X POST http://localhost:8100/api/v3/executions/{execution_id}/resume \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skip_failed_steps": false
+  }'
+```
+
+## Legacy API Examples
 
 ### Using Postman
 
