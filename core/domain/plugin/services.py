@@ -480,7 +480,7 @@ class PluginExecutionService:
         self,
         plugin_id: PluginId,
         tenant_id: UUID,
-        input_data: Dict[str, any]
+        input_data: Dict[str, Any]
     ) -> PluginExecution:
         """
         Prepare plugin execution with validation and safety checks.
@@ -558,7 +558,7 @@ class PluginExecutionService:
 
     def _validate_input_data(
         self,
-        input_data: Dict[str, any],
+        input_data: Dict[str, Any],
         plugin: Plugin
     ) -> None:
         """
@@ -593,8 +593,8 @@ class PluginExecutionService:
     async def complete_execution(
         self,
         execution_id: UUID,
-        result: Dict[str, any],
-        resource_usage: Optional[Dict[str, any]] = None
+        result: Dict[str, Any],
+        resource_usage: Optional[Dict[str, Any]] = None
     ) -> PluginExecution:
         """
         Mark execution as completed.
@@ -630,7 +630,7 @@ class PluginExecutionService:
         self,
         execution_id: UUID,
         error: str,
-        resource_usage: Optional[Dict[str, any]] = None
+        resource_usage: Optional[Dict[str, Any]] = None
     ) -> PluginExecution:
         """
         Mark execution as failed.
@@ -767,7 +767,7 @@ class PluginMarketplaceService:
         self,
         plugin_id: PluginId,
         tenant_id: UUID,
-        configuration: Optional[Dict[str, any]] = None
+        configuration: Optional[Dict[str, Any]] = None
     ) -> PluginInstallation:
         """
         Install plugin for a tenant.
