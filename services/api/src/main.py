@@ -189,6 +189,10 @@ app.include_router(health.router)
 app.include_router(cost.router)
 app.include_router(memory.router)
 
+# Import and include P0 execution persistence routes
+from services.api.src.routes import execution_persistence
+app.include_router(execution_persistence.router)
+
 # Import and include WebSocket routes
 from services.api.src.routes import websocket as ws_router
 app.include_router(ws_router.router)
