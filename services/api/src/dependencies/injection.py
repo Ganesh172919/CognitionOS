@@ -40,9 +40,25 @@ from infrastructure.persistence.cost_repository import (
     PostgreSQLWorkflowBudgetRepository,
     PostgreSQLCostTrackingRepository,
 )
+from infrastructure.persistence.tenant_repository import PostgreSQLTenantRepository
+from infrastructure.persistence.billing_repository import (
+    PostgreSQLSubscriptionRepository,
+    PostgreSQLInvoiceRepository,
+    PostgreSQLUsageRecordRepository,
+)
+from infrastructure.persistence.plugin_repository import (
+    PostgreSQLPluginRepository,
+    PostgreSQLPluginExecutionRepository,
+    PostgreSQLPluginInstallationRepository,
+)
 from core.domain.checkpoint.services import CheckpointService
 from core.domain.health_monitoring.services import AgentHealthMonitoringService
 from core.domain.cost_governance.services import CostGovernanceService
+from core.domain.billing.services import (
+    BillingService,
+    UsageMeteringService,
+    EntitlementService,
+)
 from infrastructure.events.event_bus import InMemoryEventBus
 
 
@@ -465,3 +481,116 @@ async def get_update_importance_use_case(
         importance_scorer=importance_scorer,
         l1_repository=l1_repo,
     )
+
+
+# ==================== Multi-Tenancy Dependencies ====================
+
+async def get_tenant_repository(
+    session: AsyncSession = None
+) -> PostgreSQLTenantRepository:
+    """Get tenant repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLTenantRepository(session)
+    return PostgreSQLTenantRepository(session)
+
+
+# ==================== Billing Dependencies ====================
+
+async def get_subscription_repository(
+    session: AsyncSession = None
+) -> PostgreSQLSubscriptionRepository:
+    """Get subscription repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLSubscriptionRepository(session)
+    return PostgreSQLSubscriptionRepository(session)
+
+
+async def get_invoice_repository(
+    session: AsyncSession = None
+) -> PostgreSQLInvoiceRepository:
+    """Get invoice repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLInvoiceRepository(session)
+    return PostgreSQLInvoiceRepository(session)
+
+
+async def get_usage_record_repository(
+    session: AsyncSession = None
+) -> PostgreSQLUsageRecordRepository:
+    """Get usage record repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLUsageRecordRepository(session)
+    return PostgreSQLUsageRecordRepository(session)
+
+
+async def get_entitlement_service(
+    session: AsyncSession = None
+) -> EntitlementService:
+    """Get entitlement service dependency"""
+    subscription_repo = await get_subscription_repository(session)
+    usage_repo = await get_usage_record_repository(session)
+    return EntitlementService(
+        subscription_repository=subscription_repo,
+        usage_repository=usage_repo,
+    )
+
+
+async def get_usage_metering_service(
+    session: AsyncSession = None
+) -> UsageMeteringService:
+    """Get usage metering service dependency"""
+    usage_repo = await get_usage_record_repository(session)
+    return UsageMeteringService(usage_repository=usage_repo)
+
+
+async def get_billing_service(
+    session: AsyncSession = None
+) -> BillingService:
+    """Get billing service dependency"""
+    from infrastructure.billing.provider import MockBillingProvider
+    
+    subscription_repo = await get_subscription_repository(session)
+    invoice_repo = await get_invoice_repository(session)
+    billing_provider = MockBillingProvider()  # Use mock provider for now
+    
+    return BillingService(
+        subscription_repository=subscription_repo,
+        invoice_repository=invoice_repo,
+        billing_provider=billing_provider,
+    )
+
+
+# ==================== Plugin Dependencies ====================
+
+async def get_plugin_repository(
+    session: AsyncSession = None
+) -> PostgreSQLPluginRepository:
+    """Get plugin repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLPluginRepository(session)
+    return PostgreSQLPluginRepository(session)
+
+
+async def get_plugin_execution_repository(
+    session: AsyncSession = None
+) -> PostgreSQLPluginExecutionRepository:
+    """Get plugin execution repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLPluginExecutionRepository(session)
+    return PostgreSQLPluginExecutionRepository(session)
+
+
+async def get_plugin_installation_repository(
+    session: AsyncSession = None
+) -> PostgreSQLPluginInstallationRepository:
+    """Get plugin installation repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgreSQLPluginInstallationRepository(session)
+    return PostgreSQLPluginInstallationRepository(session)
