@@ -3,6 +3,11 @@ Execution Domain - Complete Domain Package
 
 Entities, repositories, services, and events for Execution tracking.
 This context tracks execution of workflows, tasks, and agent actions.
+
+New in P0 (Deterministic Execution):
+- Execution persistence with idempotency keys
+- Replay and resume capabilities
+- Unified error model
 """
 
 from dataclasses import dataclass, field
@@ -136,19 +141,49 @@ class ExecutionFailed(DomainEvent):
     error: str
 
 
+# ==================== P0 Imports ====================
+
+from .persistence import (
+    # Enums
+    AttemptStatus,
+    ReplayMode,
+    SnapshotType,
+    ErrorCategory,
+    ErrorSeverity,
+    # Entities
+    StepExecutionAttempt,
+    ExecutionSnapshot,
+    ReplaySession,
+    ExecutionError,
+    ExecutionLock,
+)
+
+
 # ==================== Exports ====================
 
 __all__ = [
-    # Enums
+    # Original Enums
     "ExecutionStatus",
     "ExecutionType",
-    # Entities
+    # Original Entities
     "ExecutionTrace",
-    # Repositories
+    # Original Repositories
     "ExecutionTraceRepository",
-    # Events
+    # Original Events
     "DomainEvent",
     "ExecutionStarted",
     "ExecutionCompleted",
     "ExecutionFailed",
+    # P0 Enums
+    "AttemptStatus",
+    "ReplayMode",
+    "SnapshotType",
+    "ErrorCategory",
+    "ErrorSeverity",
+    # P0 Entities
+    "StepExecutionAttempt",
+    "ExecutionSnapshot",
+    "ReplaySession",
+    "ExecutionError",
+    "ExecutionLock",
 ]
