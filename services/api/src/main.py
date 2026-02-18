@@ -53,10 +53,41 @@ async def lifespan(app: FastAPI):
     if config.observability.enable_metrics:
         print(f"Prometheus metrics enabled on /metrics")
     
+    # Initialize Redis connection pool
+    try:
+        from infrastructure.persistence.redis_pool import RedisPoolManager
+        redis_pool = await RedisPoolManager.get_instance()
+        print("Redis connection pool initialized")
+    except Exception as e:
+        print(f"Warning: Failed to initialize Redis pool: {e}")
+    
     yield
     
-    # Shutdown
-    print("Shutting down...")
+    # Shutdown - graceful cleanup
+    print("Shutting down gracefully...")
+    
+    # Give existing requests time to complete (30 seconds)
+    import asyncio
+    print("Waiting for in-flight requests to complete (30s)...")
+    await asyncio.sleep(30)
+    
+    # Close database connections
+    try:
+        from services.api.src.dependencies.injection import close_db
+        await close_db()
+        print("Database connections closed")
+    except Exception as e:
+        print(f"Error closing database: {e}")
+    
+    # Close Redis connection pool
+    try:
+        from infrastructure.persistence.redis_pool import RedisPoolManager
+        await RedisPoolManager.reset()
+        print("Redis connection pool closed")
+    except Exception as e:
+        print(f"Error closing Redis pool: {e}")
+    
+    print("Shutdown complete")
 
 
 # Create FastAPI application
