@@ -57,8 +57,8 @@ def generate_cache_key(prefix: str, *args, **kwargs) -> str:
     key_parts = [prefix] + arg_strs + kwarg_strs
     key_str = ":".join(key_parts)
     
-    # Hash for consistent length
-    key_hash = hashlib.md5(key_str.encode()).hexdigest()
+    # Use blake2b for fast non-cryptographic hashing
+    key_hash = hashlib.blake2b(key_str.encode(), digest_size=16).hexdigest()
     
     return f"{prefix}:{key_hash}"
 

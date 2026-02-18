@@ -41,7 +41,7 @@ class ReplaySessionModel(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     metadata = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     
     def __repr__(self):
         return f"<ReplaySessionModel(id={self.id}, mode={self.replay_mode}, status={self.status})>"
@@ -64,7 +64,7 @@ class ExecutionSnapshotModel(Base):
     created_by = Column(String(255), nullable=False, default="system")
     snapshot_size_bytes = Column(Integer, nullable=True)
     metadata = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     
     def __repr__(self):
         return f"<ExecutionSnapshotModel(id={self.id}, execution_id={self.execution_id}, type={self.snapshot_type})>"

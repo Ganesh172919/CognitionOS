@@ -130,8 +130,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
             return False, None, None, "API key is inactive"
         
         # Check expiration
-        from datetime import datetime
-        if api_key_model.expires_at and datetime.utcnow() > api_key_model.expires_at:
+        from datetime import datetime, timezone
+        if api_key_model.expires_at and datetime.now(timezone.utc) > api_key_model.expires_at:
             return False, None, None, "API key has expired"
         
         # Get tenant

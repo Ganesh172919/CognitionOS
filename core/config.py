@@ -108,6 +108,7 @@ class APIConfig(BaseSettings):
     )
     rate_limit_per_minute: int = Field(default=60, description="Rate limit per minute")
     max_request_size: int = Field(default=10485760, description="Max request size in bytes (10MB)")
+    shutdown_timeout_seconds: int = Field(default=30, description="Graceful shutdown timeout in seconds")
 
 
 class SecurityConfig(BaseSettings):

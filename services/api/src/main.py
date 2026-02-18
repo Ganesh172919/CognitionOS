@@ -67,10 +67,11 @@ async def lifespan(app: FastAPI):
     # Shutdown - graceful cleanup
     print("Shutting down gracefully...")
     
-    # Give existing requests time to complete (30 seconds)
+    # Give existing requests time to complete (configurable timeout)
     import asyncio
-    print("Waiting for in-flight requests to complete (30s)...")
-    await asyncio.sleep(30)
+    shutdown_timeout = config.api.shutdown_timeout_seconds
+    print(f"Waiting for in-flight requests to complete ({shutdown_timeout}s)...")
+    await asyncio.sleep(shutdown_timeout)
     
     # Close database connections
     try:

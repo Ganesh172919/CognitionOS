@@ -39,7 +39,8 @@ class PostgresAPIKeyRepository:
         
         # Check expiration
         if api_key and api_key.expires_at:
-            if datetime.utcnow() > api_key.expires_at:
+            from datetime import timezone
+            if datetime.now(timezone.utc) > api_key.expires_at:
                 return None
         
         return api_key
@@ -73,5 +74,6 @@ class PostgresAPIKeyRepository:
         api_key = result.scalar_one_or_none()
         
         if api_key:
-            api_key.last_used_at = datetime.utcnow()
+            from datetime import timezone
+            api_key.last_used_at = datetime.now(timezone.utc)
             await self.session.flush()
