@@ -11,6 +11,23 @@ import sys
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Try to load .env from current directory
+    env_path = Path.cwd() / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        # Try .env.localhost
+        env_path = Path.cwd() / '.env.localhost'
+        if env_path.exists():
+            load_dotenv(env_path)
+except ImportError:
+    print("Warning: python-dotenv not installed, environment variables may not be loaded")
+    pass
 
 
 class Severity(Enum):
