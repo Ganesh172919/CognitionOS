@@ -4,12 +4,7 @@ Checkpoint API Routes
 Provides REST endpoints for checkpoint management.
 """
 
-import sys
 import os
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from typing import List
 from uuid import UUID
 

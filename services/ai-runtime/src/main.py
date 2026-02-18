@@ -4,12 +4,9 @@ AI Runtime Service with Real LLM Integration.
 Routes LLM requests to OpenAI or Anthropic with cost optimization and caching.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from datetime import datetime
 from typing import List, Dict, Optional

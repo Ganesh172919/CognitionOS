@@ -4,11 +4,9 @@ Auth Service main application.
 Handles user authentication, JWT token generation, and session management.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from datetime import datetime, timedelta
 from typing import Optional

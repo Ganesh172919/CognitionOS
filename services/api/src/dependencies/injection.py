@@ -4,13 +4,8 @@ FastAPI Dependencies
 Provides dependency injection for use cases, repositories, and infrastructure.
 """
 
-import sys
 import os
 from typing import AsyncGenerator
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, AsyncEngine
 from sqlalchemy.orm import sessionmaker
 
@@ -195,14 +190,52 @@ async def check_database_health() -> bool:
 
 async def check_redis_health() -> bool:
     """Check Redis connection health"""
-    # TODO: Implement Redis health check
-    return True
+    try:
+        import redis.asyncio as aioredis
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        config = get_config()
+        redis_client = await aioredis.from_url(
+            config.redis.url,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_connect_timeout=5,
+        )
+        # Ping Redis
+        response = await redis_client.ping()
+        await redis_client.close()
+        return response is True
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Redis health check failed: {e}")
+        return False
 
 
 async def check_rabbitmq_health() -> bool:
     """Check RabbitMQ connection health"""
-    # TODO: Implement RabbitMQ health check
-    return True
+    try:
+        import aio_pika
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        config = get_config()
+        # Build RabbitMQ URL
+        rabbitmq_url = (
+            f"amqp://{config.rabbitmq.username}:{config.rabbitmq.password}"
+            f"@{config.rabbitmq.host}:{config.rabbitmq.port}{config.rabbitmq.virtual_host}"
+        )
+        # Try to connect
+        connection = await aio_pika.connect_robust(
+            rabbitmq_url,
+            timeout=5,
+        )
+        await connection.close()
+        return True
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"RabbitMQ health check failed: {e}")
+        return False
 
 
 # ==================== Phase 3: Checkpoint Dependencies ====================
@@ -551,11 +584,27 @@ async def get_billing_service(
     session: AsyncSession = None
 ) -> BillingService:
     """Get billing service dependency"""
-    from infrastructure.billing.provider import MockBillingProvider
+    import os
+    from infrastructure.billing.provider import (
+        StripeBillingProvider,
+        MockBillingProvider,
+    )
+    
+    # Use environment variable to determine billing provider
+    billing_mode = os.getenv("BILLING_PROVIDER", "mock").lower()
+    
+    if billing_mode == "stripe":
+        stripe_api_key = os.getenv("STRIPE_API_KEY")
+        if not stripe_api_key:
+            raise ValueError("STRIPE_API_KEY must be set when using Stripe billing provider")
+        billing_provider = StripeBillingProvider(api_key=stripe_api_key)
+    elif billing_mode == "mock":
+        billing_provider = MockBillingProvider()
+    else:
+        raise ValueError(f"Unknown billing provider: {billing_mode}. Use 'stripe' or 'mock'")
     
     subscription_repo = await get_subscription_repository(session)
     invoice_repo = await get_invoice_repository(session)
-    billing_provider = MockBillingProvider()  # Use mock provider for now
     
     return BillingService(
         subscription_repository=subscription_repo,

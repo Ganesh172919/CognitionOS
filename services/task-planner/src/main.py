@@ -4,11 +4,9 @@ Task Planner Service.
 Decomposes high-level goals into executable task DAGs.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from datetime import datetime
 from typing import List, Dict, Optional, Set, Tuple

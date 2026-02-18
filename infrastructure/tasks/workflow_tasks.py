@@ -4,14 +4,9 @@ Workflow Async Tasks
 Celery tasks for async workflow execution.
 """
 
-import sys
 import os
 from uuid import UUID
 from typing import Any, Dict
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-
 from infrastructure.tasks.celery_config import celery_app
 from core.application.workflow.use_cases import (
     ProcessWorkflowStepUseCase,

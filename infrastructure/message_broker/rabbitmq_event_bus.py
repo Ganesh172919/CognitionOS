@@ -4,7 +4,6 @@ RabbitMQ Event Bus Implementation
 Replaces the in-memory event bus with a production-grade RabbitMQ implementation.
 """
 
-import sys
 import os
 import json
 import asyncio
@@ -13,10 +12,6 @@ from dataclasses import asdict
 import aio_pika
 from aio_pika import Message, ExchangeType, DeliveryMode
 from aio_pika.abc import AbstractChannel, AbstractConnection, AbstractExchange, AbstractQueue
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-
 from core.config import get_config
 from infrastructure.observability import get_logger
 

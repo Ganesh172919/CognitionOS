@@ -5,11 +5,9 @@ Comprehensive audit logging for all tool executions, API calls, and security eve
 Provides tamper-evident logging with integrity checks and forensic analysis.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import hashlib
 import json

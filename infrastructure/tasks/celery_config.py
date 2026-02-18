@@ -4,12 +4,7 @@ Celery Configuration for CognitionOS V3
 Provides async task queue for long-running workflow executions.
 """
 
-import sys
 import os
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-
 from celery import Celery
 from core.config import get_config
 

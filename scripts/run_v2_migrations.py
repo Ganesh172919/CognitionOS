@@ -6,12 +6,10 @@ Applies V2 migrations to the CognitionOS database.
 """
 
 import os
-import sys
 import asyncio
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy import text

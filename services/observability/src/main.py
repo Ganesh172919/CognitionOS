@@ -5,11 +5,9 @@ Centralized monitoring, metrics collection, tracing, and alerting for CognitionO
 Provides real-time insights into system health, performance, and failures.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import time
 from datetime import datetime, timedelta

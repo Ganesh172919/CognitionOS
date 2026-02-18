@@ -4,14 +4,9 @@ Authentication API Routes
 Provides endpoints for user registration, login, and token management.
 """
 
-import sys
 import os
 from datetime import timedelta
 from typing import Optional
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession

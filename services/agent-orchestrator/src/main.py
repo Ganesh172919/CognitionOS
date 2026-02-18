@@ -4,11 +4,9 @@ Agent Orchestrator Service.
 Manages agent lifecycle, task assignment, and execution coordination.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional

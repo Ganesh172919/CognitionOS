@@ -4,12 +4,7 @@ Subscription API Routes
 Provides REST endpoints for subscription and billing management.
 """
 
-import sys
 import os
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional

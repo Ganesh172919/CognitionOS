@@ -4,14 +4,9 @@ CognitionOS V3 API Service - Main Application
 FastAPI application providing REST APIs for the V3 clean architecture.
 """
 
-import sys
 import os
 from datetime import datetime
 from contextlib import asynccontextmanager
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +21,7 @@ from services.api.src.dependencies.injection import (
     check_redis_health,
     check_rabbitmq_health,
 )
+from services.api.src.error_handlers import register_error_handlers
 from infrastructure.observability import (
     setup_tracing,
     instrument_fastapi,
@@ -91,6 +87,10 @@ app = FastAPI(
 
 # ==================== Middleware ====================
 
+# Request ID middleware (should be first)
+from services.api.src.middleware.request_id import RequestIDMiddleware
+app.add_middleware(RequestIDMiddleware)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -117,17 +117,8 @@ app.mount("/metrics", metrics_app)
 
 # ==================== Error Handlers ====================
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Global exception handler"""
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(
-            error="InternalServerError",
-            message=str(exc),
-            trace_id=getattr(request.state, "trace_id", None),
-        ).model_dump(),
-    )
+# Register centralized error handlers
+register_error_handlers(app)
 
 
 # ==================== Health Check ====================

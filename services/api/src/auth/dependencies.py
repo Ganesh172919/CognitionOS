@@ -4,15 +4,10 @@ Authentication Middleware and Dependencies
 Provides FastAPI dependencies for JWT authentication and authorization.
 """
 
-import sys
 import os
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from services.api.src.auth.jwt import verify_token, extract_user_id, extract_user_roles
 
 

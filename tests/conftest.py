@@ -4,7 +4,6 @@ Pytest Configuration and Shared Fixtures
 This module provides pytest configuration and shared fixtures for all tests.
 """
 
-import sys
 import os
 
 # Suppress deprecation warnings from python-multipart BEFORE any imports
@@ -19,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.pool import StaticPool
 
 # Add project root to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.api.src.main import app
 from core.config import get_config

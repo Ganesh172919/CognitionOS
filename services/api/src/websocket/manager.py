@@ -5,16 +5,11 @@ Provides WebSocket endpoints for streaming real-time workflow status,
 event notifications, and live updates to clients.
 """
 
-import sys
 import os
 import json
 import asyncio
 from typing import Set, Dict, Any
 from datetime import datetime
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-
 from fastapi import WebSocket, WebSocketDisconnect, Depends, status
 from fastapi.responses import HTMLResponse
 
