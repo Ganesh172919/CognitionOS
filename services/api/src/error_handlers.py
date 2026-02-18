@@ -25,6 +25,7 @@ from core.exceptions import (
     AuthorizationError,
     TenantError,
     BillingError,
+    PaymentRequiredError,
     ValidationError,
     RateLimitError,
     ResourceError,
@@ -81,7 +82,11 @@ async def cognitionos_exception_handler(
         else:
             status_code = status.HTTP_400_BAD_REQUEST
     elif isinstance(exc, (TenantError, BillingError)):
-        status_code = status.HTTP_402_PAYMENT_REQUIRED if "Payment" in exc.message else status.HTTP_403_FORBIDDEN
+        # Check exception class name for payment-related errors
+        if isinstance(exc, PaymentRequiredError):
+            status_code = status.HTTP_402_PAYMENT_REQUIRED
+        else:
+            status_code = status.HTTP_403_FORBIDDEN
     elif isinstance(exc, RateLimitError):
         status_code = status.HTTP_429_TOO_MANY_REQUESTS
     elif isinstance(exc, DatabaseError):

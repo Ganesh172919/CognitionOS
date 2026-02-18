@@ -192,6 +192,9 @@ async def check_redis_health() -> bool:
     """Check Redis connection health"""
     try:
         import redis.asyncio as aioredis
+        import logging
+        logger = logging.getLogger(__name__)
+        
         config = get_config()
         redis_client = await aioredis.from_url(
             config.redis.url,
@@ -204,7 +207,8 @@ async def check_redis_health() -> bool:
         await redis_client.close()
         return response is True
     except Exception as e:
-        print(f"Redis health check failed: {e}")
+        logger = logging.getLogger(__name__)
+        logger.error(f"Redis health check failed: {e}")
         return False
 
 
@@ -212,6 +216,9 @@ async def check_rabbitmq_health() -> bool:
     """Check RabbitMQ connection health"""
     try:
         import aio_pika
+        import logging
+        logger = logging.getLogger(__name__)
+        
         config = get_config()
         # Build RabbitMQ URL
         rabbitmq_url = (
@@ -226,7 +233,8 @@ async def check_rabbitmq_health() -> bool:
         await connection.close()
         return True
     except Exception as e:
-        print(f"RabbitMQ health check failed: {e}")
+        logger = logging.getLogger(__name__)
+        logger.error(f"RabbitMQ health check failed: {e}")
         return False
 
 

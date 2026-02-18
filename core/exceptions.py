@@ -361,7 +361,7 @@ class InternalError(CognitionOSException):
     pass
 
 
-class NotImplementedError(InternalError):
+class FeatureNotImplementedError(InternalError):
     """Feature not yet implemented"""
     pass
 

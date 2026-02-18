@@ -31,6 +31,13 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     """
     
     def __init__(self, app: ASGIApp, header_name: str = "X-Request-ID"):
+        """
+        Initialize RequestIDMiddleware.
+        
+        Args:
+            app: The ASGI application
+            header_name: Name of the HTTP header for request ID (default: X-Request-ID)
+        """
         super().__init__(app)
         self.header_name = header_name
     

@@ -27,7 +27,7 @@ try:
             load_dotenv(env_path)
 except ImportError:
     print("Warning: python-dotenv not installed, environment variables may not be loaded")
-    pass
+    # Continue without .env file - environment variables may be set directly
 
 
 class Severity(Enum):
