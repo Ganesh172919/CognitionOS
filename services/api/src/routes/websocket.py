@@ -7,14 +7,9 @@ Provides WebSocket endpoints for:
 - System notifications
 """
 
-import sys
 import os
 import json
 from typing import Optional
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends, status
 from fastapi.responses import HTMLResponse
 

@@ -30,7 +30,10 @@ RUN pip install --no-cache-dir \
 # Copy application code
 COPY . .
 
-# Add app to PYTHONPATH
+# Install package in editable mode for proper imports
+RUN pip install -e .
+
+# Add app to PYTHONPATH (for backward compatibility)
 ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Expose API and debug ports

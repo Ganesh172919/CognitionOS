@@ -4,14 +4,9 @@ OpenTelemetry Tracing Integration
 Provides distributed tracing for CognitionOS V3 with automatic instrumentation.
 """
 
-import sys
 import os
 from typing import Optional
 from contextlib import contextmanager
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor

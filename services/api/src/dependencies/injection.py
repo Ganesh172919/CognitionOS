@@ -4,13 +4,8 @@ FastAPI Dependencies
 Provides dependency injection for use cases, repositories, and infrastructure.
 """
 
-import sys
 import os
 from typing import AsyncGenerator
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, AsyncEngine
 from sqlalchemy.orm import sessionmaker
 
@@ -195,14 +190,44 @@ async def check_database_health() -> bool:
 
 async def check_redis_health() -> bool:
     """Check Redis connection health"""
-    # TODO: Implement Redis health check
-    return True
+    try:
+        import redis.asyncio as aioredis
+        config = get_config()
+        redis_client = await aioredis.from_url(
+            config.redis.url,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_connect_timeout=5,
+        )
+        # Ping Redis
+        response = await redis_client.ping()
+        await redis_client.close()
+        return response is True
+    except Exception as e:
+        print(f"Redis health check failed: {e}")
+        return False
 
 
 async def check_rabbitmq_health() -> bool:
     """Check RabbitMQ connection health"""
-    # TODO: Implement RabbitMQ health check
-    return True
+    try:
+        import aio_pika
+        config = get_config()
+        # Build RabbitMQ URL
+        rabbitmq_url = (
+            f"amqp://{config.rabbitmq.username}:{config.rabbitmq.password}"
+            f"@{config.rabbitmq.host}:{config.rabbitmq.port}{config.rabbitmq.virtual_host}"
+        )
+        # Try to connect
+        connection = await aio_pika.connect_robust(
+            rabbitmq_url,
+            timeout=5,
+        )
+        await connection.close()
+        return True
+    except Exception as e:
+        print(f"RabbitMQ health check failed: {e}")
+        return False
 
 
 # ==================== Phase 3: Checkpoint Dependencies ====================

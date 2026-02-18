@@ -5,11 +5,9 @@ Generates human-readable explanations of agent reasoning, decisions, and actions
 Provides reasoning summaries, confidence scoring, and decision traces.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any

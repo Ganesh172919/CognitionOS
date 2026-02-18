@@ -4,13 +4,8 @@ Workflow Event Handlers
 Handlers for workflow lifecycle events using RabbitMQ event bus.
 """
 
-import sys
 import os
 from typing import Any, Dict
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-
 from infrastructure.observability import get_logger
 from infrastructure.message_broker import get_event_bus
 

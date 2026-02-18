@@ -4,14 +4,9 @@ CognitionOS V3 API Service - Main Application
 FastAPI application providing REST APIs for the V3 clean architecture.
 """
 
-import sys
 import os
 from datetime import datetime
 from contextlib import asynccontextmanager
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware

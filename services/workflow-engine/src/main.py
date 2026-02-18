@@ -4,11 +4,9 @@ Workflow Engine Service.
 Executes declarative workflows defined in YAML/JSON DSL.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from datetime import datetime
 from typing import List, Dict, Optional

@@ -4,14 +4,9 @@ Prometheus Metrics Integration
 Provides metrics collection and exposure for CognitionOS V3.
 """
 
-import sys
 import os
 from typing import Optional
 import time
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-
 from prometheus_client import (
     Counter,
     Histogram,

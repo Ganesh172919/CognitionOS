@@ -4,12 +4,7 @@ P0 Execution Persistence API Routes
 New endpoints for deterministic execution, replay, and resume.
 """
 
-import sys
 import os
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4

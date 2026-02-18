@@ -17,9 +17,7 @@ from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 
 # Add project root to path
-import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from services.api.src.main import app
 

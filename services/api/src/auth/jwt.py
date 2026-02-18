@@ -4,16 +4,11 @@ JWT Authentication Module
 Provides JWT token generation, validation, and authentication middleware.
 """
 
-import sys
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from core.config import get_config
 
 

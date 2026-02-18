@@ -5,12 +5,7 @@ Provides REST endpoints for agent health monitoring, incident management,
 and system health checks.
 """
 
-import sys
 import os
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from typing import List, Dict, Any
 from uuid import UUID
 

@@ -4,12 +4,7 @@ Cost Governance API Routes
 Provides REST endpoints for budget management and cost tracking.
 """
 
-import sys
 import os
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status

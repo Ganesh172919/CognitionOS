@@ -4,12 +4,7 @@ Plugin API Routes
 Provides REST endpoints for plugin marketplace and management.
 """
 
-import sys
 import os
-
-# Add core modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID, uuid4

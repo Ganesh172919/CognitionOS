@@ -5,11 +5,9 @@ Routes requests to appropriate microservices with rate limiting,
 authentication, and circuit breaker protection.
 """
 
-import sys
 import os
 
 # Add shared libs to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from datetime import datetime
 from typing import Optional
