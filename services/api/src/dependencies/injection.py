@@ -576,11 +576,27 @@ async def get_billing_service(
     session: AsyncSession = None
 ) -> BillingService:
     """Get billing service dependency"""
-    from infrastructure.billing.provider import MockBillingProvider
+    import os
+    from infrastructure.billing.provider import (
+        StripeBillingProvider,
+        MockBillingProvider,
+    )
+    
+    # Use environment variable to determine billing provider
+    billing_mode = os.getenv("BILLING_PROVIDER", "mock").lower()
+    
+    if billing_mode == "stripe":
+        stripe_api_key = os.getenv("STRIPE_API_KEY")
+        if not stripe_api_key:
+            raise ValueError("STRIPE_API_KEY must be set when using Stripe billing provider")
+        billing_provider = StripeBillingProvider(api_key=stripe_api_key)
+    elif billing_mode == "mock":
+        billing_provider = MockBillingProvider()
+    else:
+        raise ValueError(f"Unknown billing provider: {billing_mode}. Use 'stripe' or 'mock'")
     
     subscription_repo = await get_subscription_repository(session)
     invoice_repo = await get_invoice_repository(session)
-    billing_provider = MockBillingProvider()  # Use mock provider for now
     
     return BillingService(
         subscription_repository=subscription_repo,
