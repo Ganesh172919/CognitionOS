@@ -9,6 +9,7 @@ from uuid import UUID
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from core.domain.workflow import (
     Workflow,
@@ -75,6 +76,7 @@ class PostgreSQLWorkflowRepository(WorkflowRepository):
         """Get latest version of workflow"""
         stmt = (
             select(WorkflowModel)
+            .options(selectinload(WorkflowModel.executions))
             .where(WorkflowModel.id == workflow_id.value)
             .order_by(
                 WorkflowModel.version_major.desc(),
@@ -251,7 +253,11 @@ class PostgreSQLWorkflowExecutionRepository(WorkflowExecutionRepository):
 
     async def get_by_id(self, execution_id: UUID) -> Optional[WorkflowExecution]:
         """Retrieve execution by ID"""
-        stmt = select(WorkflowExecutionModel).where(WorkflowExecutionModel.id == execution_id)
+        stmt = (
+            select(WorkflowExecutionModel)
+            .options(selectinload(WorkflowExecutionModel.step_executions))
+            .where(WorkflowExecutionModel.id == execution_id)
+        )
 
         result = await self.session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -268,8 +274,10 @@ class PostgreSQLWorkflowExecutionRepository(WorkflowExecutionRepository):
         status: Optional[ExecutionStatus] = None
     ) -> List[WorkflowExecution]:
         """Get executions for a workflow"""
-        stmt = select(WorkflowExecutionModel).where(
-            WorkflowExecutionModel.workflow_id == workflow_id.value
+        stmt = (
+            select(WorkflowExecutionModel)
+            .options(selectinload(WorkflowExecutionModel.step_executions))
+            .where(WorkflowExecutionModel.workflow_id == workflow_id.value)
         )
 
         if status:

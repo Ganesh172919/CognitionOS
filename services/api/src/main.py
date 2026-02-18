@@ -6,6 +6,7 @@ FastAPI application providing REST APIs for the V3 clean architecture.
 
 import os
 from datetime import datetime
+from typing import Any, Dict
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -53,10 +54,42 @@ async def lifespan(app: FastAPI):
     if config.observability.enable_metrics:
         print(f"Prometheus metrics enabled on /metrics")
     
+    # Initialize Redis connection pool
+    try:
+        from infrastructure.persistence.redis_pool import RedisPoolManager
+        redis_pool = await RedisPoolManager.get_instance()
+        print("Redis connection pool initialized")
+    except Exception as e:
+        print(f"Warning: Failed to initialize Redis pool: {e}")
+    
     yield
     
-    # Shutdown
-    print("Shutting down...")
+    # Shutdown - graceful cleanup
+    print("Shutting down gracefully...")
+    
+    # Give existing requests time to complete (configurable timeout)
+    import asyncio
+    shutdown_timeout = config.api.shutdown_timeout_seconds
+    print(f"Waiting for in-flight requests to complete ({shutdown_timeout}s)...")
+    await asyncio.sleep(shutdown_timeout)
+    
+    # Close database connections
+    try:
+        from services.api.src.dependencies.injection import close_db
+        await close_db()
+        print("Database connections closed")
+    except Exception as e:
+        print(f"Error closing database: {e}")
+    
+    # Close Redis connection pool
+    try:
+        from infrastructure.persistence.redis_pool import RedisPoolManager
+        await RedisPoolManager.reset()
+        print("Redis connection pool closed")
+    except Exception as e:
+        print(f"Error closing Redis pool: {e}")
+    
+    print("Shutdown complete")
 
 
 # Create FastAPI application
@@ -144,6 +177,65 @@ async def health_check() -> HealthCheckResponse:
         redis=redis_status,
         rabbitmq=rabbitmq_status,
     )
+
+
+@app.get(
+    "/health/live",
+    tags=["Health"],
+    summary="Liveness probe",
+    description="Kubernetes liveness probe - checks if the application is alive",
+)
+async def liveness_probe() -> Dict[str, Any]:
+    """
+    Liveness probe for Kubernetes.
+    Returns 200 if the application is running.
+    """
+    return {
+        "status": "alive",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get(
+    "/health/ready",
+    tags=["Health"],
+    summary="Readiness probe",
+    description="Kubernetes readiness probe - checks if the application can serve requests",
+)
+async def readiness_probe() -> Dict[str, Any]:
+    """
+    Readiness probe for Kubernetes.
+    Returns 200 only if all critical dependencies are healthy.
+    """
+    db_healthy = await check_database_health()
+    redis_healthy = await check_redis_health()
+    
+    # Service is ready if database is healthy (Redis is optional)
+    is_ready = db_healthy
+    
+    if not is_ready:
+        from fastapi import status
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "not_ready",
+                "timestamp": datetime.utcnow().isoformat(),
+                "dependencies": {
+                    "database": "healthy" if db_healthy else "unhealthy",
+                    "redis": "healthy" if redis_healthy else "unhealthy",
+                }
+            }
+        )
+    
+    return {
+        "status": "ready",
+        "timestamp": datetime.utcnow().isoformat(),
+        "dependencies": {
+            "database": "healthy",
+            "redis": "healthy" if redis_healthy else "degraded",
+        }
+    }
 
 
 @app.get(

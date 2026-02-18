@@ -9,7 +9,7 @@ from typing import List
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
-    Column, String, DateTime, Enum, Integer, JSON, ForeignKey, Text, Boolean
+    Column, String, DateTime, Enum, Integer, JSON, ForeignKey, Text, Boolean, Index
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, ARRAY
 from sqlalchemy.orm import relationship
@@ -60,8 +60,10 @@ class WorkflowModel(Base):
     # Relationships
     executions = relationship("WorkflowExecutionModel", back_populates="workflow", cascade="all, delete-orphan")
 
-    # Composite unique constraint on (id, version)
+    # Composite unique constraint on (id, version) and performance indexes
     __table_args__ = (
+        Index('idx_workflow_status_created', 'status', 'created_at'),
+        Index('idx_workflow_created_by', 'created_by'),
         {'extend_existing': True}
     )
 
@@ -91,6 +93,13 @@ class WorkflowExecutionModel(Base):
     # Relationships
     workflow = relationship("WorkflowModel", back_populates="executions")
     step_executions = relationship("StepExecutionModel", back_populates="execution", cascade="all, delete-orphan")
+    
+    # Performance indexes
+    __table_args__ = (
+        Index('idx_execution_workflow_status', 'workflow_id', 'status', 'created_at'),
+        Index('idx_execution_user_created', 'user_id', 'created_at'),
+        Index('idx_execution_status_started', 'status', 'started_at'),
+    )
 
 
 class StepExecutionModel(Base):

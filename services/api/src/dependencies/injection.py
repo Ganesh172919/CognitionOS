@@ -46,6 +46,7 @@ from infrastructure.persistence.plugin_repository import (
     PostgreSQLPluginExecutionRepository,
     PostgreSQLPluginInstallationRepository,
 )
+from infrastructure.persistence.api_key_repository import PostgresAPIKeyRepository
 from core.domain.checkpoint.services import CheckpointService
 from core.domain.health_monitoring.services import AgentHealthMonitoringService
 from core.domain.cost_governance.services import CostGovernanceService
@@ -97,6 +98,14 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
+async def close_db() -> None:
+    """Close database engine and all connections"""
+    global _engine
+    if _engine is not None:
+        await _engine.dispose()
+        _engine = None
 
 
 # Event bus (singleton)
@@ -191,21 +200,8 @@ async def check_database_health() -> bool:
 async def check_redis_health() -> bool:
     """Check Redis connection health"""
     try:
-        import redis.asyncio as aioredis
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        config = get_config()
-        redis_client = await aioredis.from_url(
-            config.redis.url,
-            encoding="utf-8",
-            decode_responses=True,
-            socket_connect_timeout=5,
-        )
-        # Ping Redis
-        response = await redis_client.ping()
-        await redis_client.close()
-        return response is True
+        from infrastructure.persistence.redis_pool import check_redis_health as redis_health
+        return await redis_health()
     except Exception as e:
         logger = logging.getLogger(__name__)
         logger.error(f"Redis health check failed: {e}")
@@ -526,6 +522,16 @@ async def get_tenant_repository(
         async with async_session_factory() as session:
             return PostgreSQLTenantRepository(session)
     return PostgreSQLTenantRepository(session)
+
+
+async def get_api_key_repository(
+    session: AsyncSession = None
+) -> PostgresAPIKeyRepository:
+    """Get API key repository dependency"""
+    if session is None:
+        async with async_session_factory() as session:
+            return PostgresAPIKeyRepository(session)
+    return PostgresAPIKeyRepository(session)
 
 
 # ==================== Billing Dependencies ====================

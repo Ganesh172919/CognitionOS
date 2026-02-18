@@ -120,44 +120,38 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         key_hash = self._hash_api_key(api_key)
         
         # Look up API key in database
-        # For now, we'll use a simplified approach since we don't have the full repo
-        # In production, this would query the api_keys table
+        api_key_model = await self.api_key_repository.get_by_hash(key_hash)
         
-        # Extract prefix for identification (first 12 chars after cog_)
-        key_prefix = api_key[4:16] if len(api_key) > 16 else api_key[4:]
-        
-        # TODO: Implement actual database lookup
-        # api_key_obj = await self.api_key_repository.get_by_hash(key_hash)
-        
-        # Mock implementation for now
-        # In production: check is_active, expires_at, scopes, etc.
-        api_key_obj = None
-        
-        if not api_key_obj:
-            return False, None, None, "API key not found"
+        if not api_key_model:
+            return False, None, None, "API key not found or revoked"
         
         # Check if active
-        if not api_key_obj.get('is_active', False):
+        if not api_key_model.is_active:
             return False, None, None, "API key is inactive"
         
         # Check expiration
-        from datetime import datetime
-        expires_at = api_key_obj.get('expires_at')
-        if expires_at and datetime.utcnow() > expires_at:
+        from datetime import datetime, timezone
+        if api_key_model.expires_at and datetime.now(timezone.utc) > api_key_model.expires_at:
             return False, None, None, "API key has expired"
         
         # Get tenant
-        tenant_id = api_key_obj.get('tenant_id')
-        if not tenant_id:
-            return False, None, None, "API key has no associated tenant"
-        
-        tenant = await self.tenant_repository.get_by_id(UUID(tenant_id))
+        tenant = await self.tenant_repository.get_by_id(api_key_model.tenant_id)
         if not tenant:
             return False, None, None, "Tenant not found"
         
         # Check tenant status
         if not tenant.is_active():
             return False, None, None, f"Tenant is {tenant.status.value}"
+        
+        # Convert to dict for consistency with existing code
+        api_key_obj = {
+            'id': api_key_model.id,
+            'name': api_key_model.name,
+            'tenant_id': api_key_model.tenant_id,
+            'scopes': api_key_model.scopes,
+            'rate_limit_per_minute': api_key_model.rate_limit_per_minute,
+            'is_active': api_key_model.is_active,
+        }
         
         return True, tenant, api_key_obj, None
     
@@ -168,9 +162,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     async def _update_last_used(self, api_key_id: UUID):
         """Update last_used_at timestamp for API key."""
         try:
-            # TODO: Implement database update
-            # await self.api_key_repository.update_last_used(api_key_id)
-            pass
+            await self.api_key_repository.update_last_used(api_key_id)
         except Exception as e:
             logger.warning(f"Failed to update API key last_used_at: {e}")
     

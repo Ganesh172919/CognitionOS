@@ -149,8 +149,13 @@ async def replay_execution(
             triggered_by=None,  # TODO: Get from auth context
         )
 
-        # TODO: Save replay session to database
-        # TODO: Queue replay execution task
+        # Save replay session to database
+        from infrastructure.persistence.execution_persistence_repository import PostgreSQLReplaySessionRepository
+        replay_repo = PostgreSQLReplaySessionRepository(session)
+        await replay_repo.save(replay_session)
+
+        # TODO: Queue replay execution task via message broker
+        # For now, we mark it as queued in the response
 
         return ReplayExecutionResponse(
             replay_session_id=str(replay_session.id),
@@ -211,18 +216,35 @@ async def resume_execution(
                 detail="Cannot resume a completed execution"
             )
 
-        # TODO: Get latest snapshot for execution
-        # For now, create a mock snapshot
-        snapshot = ExecutionSnapshot(
-            id=uuid4(),
-            execution_id=execution_id,
-            snapshot_type=SnapshotType.CHECKPOINT,
-            workflow_state={"status": execution.status.value},
-            step_states={},
-            completed_steps=[],
-            pending_steps=["step1", "step2"],  # TODO: Get from actual execution state
-            failed_steps=[],
-        )
+        # Get latest snapshot for execution
+        from infrastructure.persistence.execution_persistence_repository import PostgreSQLExecutionSnapshotRepository
+        snapshot_repo = PostgreSQLExecutionSnapshotRepository(session)
+        
+        # Try to get specific snapshot if provided
+        if request.from_snapshot_id:
+            snapshot = await snapshot_repo.get_by_id(UUID(request.from_snapshot_id))
+            if not snapshot:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Snapshot {request.from_snapshot_id} not found"
+                )
+        else:
+            # Get latest snapshot
+            snapshot = await snapshot_repo.get_latest_for_execution(execution_id)
+        
+        # If no snapshot exists, create one from current execution state
+        if not snapshot:
+            snapshot = ExecutionSnapshot(
+                id=uuid4(),
+                execution_id=execution_id,
+                snapshot_type=SnapshotType.CHECKPOINT,
+                workflow_state={"status": execution.status.value},
+                step_states={},
+                completed_steps=[],
+                pending_steps=["step1", "step2"],  # TODO: Get from actual execution state
+                failed_steps=[],
+            )
+            await snapshot_repo.save(snapshot)
 
         if not snapshot.can_resume_from():
             raise HTTPException(
@@ -231,7 +253,7 @@ async def resume_execution(
             )
 
         # Update execution status to running
-        # TODO: Queue resume execution task with snapshot
+        # TODO: Queue resume execution task with snapshot via message broker
 
         return ResumeExecutionResponse(
             execution_id=str(execution_id),
