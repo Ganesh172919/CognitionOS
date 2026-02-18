@@ -6,6 +6,7 @@ FastAPI application providing REST APIs for the V3 clean architecture.
 
 import os
 from datetime import datetime
+from typing import Any, Dict
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -175,6 +176,65 @@ async def health_check() -> HealthCheckResponse:
         redis=redis_status,
         rabbitmq=rabbitmq_status,
     )
+
+
+@app.get(
+    "/health/live",
+    tags=["Health"],
+    summary="Liveness probe",
+    description="Kubernetes liveness probe - checks if the application is alive",
+)
+async def liveness_probe() -> Dict[str, Any]:
+    """
+    Liveness probe for Kubernetes.
+    Returns 200 if the application is running.
+    """
+    return {
+        "status": "alive",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get(
+    "/health/ready",
+    tags=["Health"],
+    summary="Readiness probe",
+    description="Kubernetes readiness probe - checks if the application can serve requests",
+)
+async def readiness_probe() -> Dict[str, Any]:
+    """
+    Readiness probe for Kubernetes.
+    Returns 200 only if all critical dependencies are healthy.
+    """
+    db_healthy = await check_database_health()
+    redis_healthy = await check_redis_health()
+    
+    # Service is ready if database is healthy (Redis is optional)
+    is_ready = db_healthy
+    
+    if not is_ready:
+        from fastapi import status
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "not_ready",
+                "timestamp": datetime.utcnow().isoformat(),
+                "dependencies": {
+                    "database": "healthy" if db_healthy else "unhealthy",
+                    "redis": "healthy" if redis_healthy else "unhealthy",
+                }
+            }
+        )
+    
+    return {
+        "status": "ready",
+        "timestamp": datetime.utcnow().isoformat(),
+        "dependencies": {
+            "database": "healthy",
+            "redis": "healthy" if redis_healthy else "degraded",
+        }
+    }
 
 
 @app.get(
