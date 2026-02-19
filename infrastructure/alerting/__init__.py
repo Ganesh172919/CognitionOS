@@ -1,12 +1,29 @@
-"""Alert management and routing infrastructure."""
+"""Advanced Notification System"""
 
-from infrastructure.alerting.alert_manager import AlertManager, AlertSeverity, AlertRule
-from infrastructure.alerting.alert_router import AlertRouter, AlertChannel
+from .notification_system import (
+    NotificationSystem,
+    Notification,
+    NotificationChannel,
+    NotificationPriority,
+    NotificationStatus,
+    NotificationTemplate,
+    UserPreferences,
+    NotificationProvider,
+    EmailProvider,
+    SMSProvider,
+    WebhookProvider,
+)
 
 __all__ = [
-    "AlertManager",
-    "AlertSeverity",
-    "AlertRule",
-    "AlertRouter",
-    "AlertChannel",
+    "NotificationSystem",
+    "Notification",
+    "NotificationChannel",
+    "NotificationPriority",
+    "NotificationStatus",
+    "NotificationTemplate",
+    "UserPreferences",
+    "NotificationProvider",
+    "EmailProvider",
+    "SMSProvider",
+    "WebhookProvider",
 ]
