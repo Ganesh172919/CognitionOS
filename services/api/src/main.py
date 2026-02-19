@@ -296,6 +296,14 @@ app.include_router(marketplace.router)
 from services.api.src.routes import advanced_systems
 app.include_router(advanced_systems.router)
 
+# Import and include developer tools routes
+from services.api.src.routes import developer_tools
+app.include_router(developer_tools.router)
+
+# Import and include reliability & workflow routes
+from services.api.src.routes import reliability_workflows
+app.include_router(reliability_workflows.router)
+
 
 # ==================== Main Entry Point ====================
 

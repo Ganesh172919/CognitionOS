@@ -16,8 +16,10 @@ Components:
 - intelligence/: Predictive analytics and intelligence
 - sdk/: SDK auto-generation
 - dev_tools/: Developer tools and documentation
+- reliability/: Chaos engineering and resilience testing
+- workflow/: Advanced workflow orchestration with branching
 
 This layer depends on domain layer interfaces but provides the concrete implementations.
 """
 
-__version__ = "3.0.0"
+__version__ = "3.2.0"

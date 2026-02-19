@@ -1,1 +1,1 @@
-"""Workflow automation builder"""\n
+"""Workflow automation builder"""

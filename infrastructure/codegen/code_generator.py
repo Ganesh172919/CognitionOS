@@ -57,10 +57,8 @@ class CodeGenerator:
     async def _generate_for_language(self, spec: CodeSpec) -> str:
         """Generate code for specified language"""
         if spec.language == CodeLanguage.PYTHON:
-            return f"""def {spec.name}():
-    """
-    {spec.description}
-    """
+            return f'''def {spec.name}():
+    """{spec.description}"""
     pass
-"""
+'''
         return f"// {spec.name}"
