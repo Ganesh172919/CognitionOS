@@ -286,6 +286,16 @@ app.include_router(tenants.router)
 app.include_router(subscriptions.router)
 app.include_router(plugins.router)
 
+# Import and include advanced analytics routes
+from services.api.src.routes import analytics_advanced, engagement, marketplace
+app.include_router(analytics_advanced.router)
+app.include_router(engagement.router)
+app.include_router(marketplace.router)
+
+# Import and include advanced systems routes
+from services.api.src.routes import advanced_systems
+app.include_router(advanced_systems.router)
+
 
 # ==================== Main Entry Point ====================
 
