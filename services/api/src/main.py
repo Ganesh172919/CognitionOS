@@ -292,6 +292,10 @@ app.include_router(analytics_advanced.router)
 app.include_router(engagement.router)
 app.include_router(marketplace.router)
 
+# Import and include advanced systems routes
+from services.api.src.routes import advanced_systems
+app.include_router(advanced_systems.router)
+
 
 # ==================== Main Entry Point ====================
 
