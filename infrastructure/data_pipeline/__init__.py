@@ -1,1 +1,1 @@
-"""Data pipeline system"""\n
+"""Data pipeline system"""
