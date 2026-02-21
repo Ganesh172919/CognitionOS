@@ -25,6 +25,16 @@ from .state_machine import (
     build_workflow_machine,
     build_agent_machine,
 )
+from .dsl_compiler import (
+    WorkflowDSLCompiler,
+    CompiledWorkflow,
+    CompilationResult,
+    WorkflowStep,
+    WorkflowTrigger,
+    RetryPolicy,
+    ValidationError,
+    get_compiler,
+)
 
 __all__ = [
     "WorkflowOrchestrationEngine",
@@ -45,4 +55,12 @@ __all__ = [
     "TransitionRecord",
     "build_workflow_machine",
     "build_agent_machine",
+    "WorkflowDSLCompiler",
+    "CompiledWorkflow",
+    "CompilationResult",
+    "WorkflowStep",
+    "WorkflowTrigger",
+    "RetryPolicy",
+    "ValidationError",
+    "get_compiler",
 ]

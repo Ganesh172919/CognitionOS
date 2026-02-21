@@ -13,6 +13,18 @@ from .tool_registry import (
 )
 from .vector_memory import VectorMemoryStore, MemoryEntry, SearchResult
 from .execution_engine import AgentExecutionEngine, ExecutionContext, StepResult
+from .memory_consolidator import MemoryConsolidator, ConsolidationRule, ConsolidationStats
+from .coordination_bus import (
+    AgentCoordinationBus,
+    CoordinationMessage,
+    AgentRegistration,
+    MessageType,
+    MessagePriority,
+    AgentStatus,
+    ResourceLock,
+    ConsensusProposal,
+    get_coordination_bus,
+)
 
 __all__ = [
     "ToolRegistry",
@@ -31,4 +43,16 @@ __all__ = [
     "AgentExecutionEngine",
     "ExecutionContext",
     "StepResult",
+    "MemoryConsolidator",
+    "ConsolidationRule",
+    "ConsolidationStats",
+    "AgentCoordinationBus",
+    "CoordinationMessage",
+    "AgentRegistration",
+    "MessageType",
+    "MessagePriority",
+    "AgentStatus",
+    "ResourceLock",
+    "ConsensusProposal",
+    "get_coordination_bus",
 ]

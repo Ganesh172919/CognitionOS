@@ -308,6 +308,10 @@ app.include_router(reliability_workflows.router)
 from services.api.src.routes import intelligence
 app.include_router(intelligence.router)
 
+# Import and include platform routes (RBAC, config, onboarding, DSL compiler, coordination)
+from services.api.src.routes import platform as platform_router
+app.include_router(platform_router.router)
+
 
 # ==================== Main Entry Point ====================
 
