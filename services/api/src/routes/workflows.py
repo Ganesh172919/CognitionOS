@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.application.workflow.use_cases import (
@@ -41,7 +41,7 @@ router = APIRouter(prefix="/api/v3/workflows", tags=["Workflows"])
 @router.post(
     "",
     response_model=WorkflowResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=http_status.HTTP_201_CREATED,
     summary="Create a new workflow",
     description="Create a new workflow definition with steps and dependencies",
 )
@@ -74,7 +74,7 @@ async def create_workflow(
         workflow = await workflow_repo.get_by_id(workflow_id)
         if not workflow:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to retrieve created workflow"
             )
         
@@ -106,12 +106,12 @@ async def create_workflow(
         
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create workflow: {str(e)}"
         )
 
@@ -136,7 +136,7 @@ async def get_workflow(
         
         if not workflow:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail=f"Workflow {workflow_id} version {version} not found"
             )
         
@@ -167,7 +167,7 @@ async def get_workflow(
         
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve workflow: {str(e)}"
         )
 
@@ -175,7 +175,7 @@ async def get_workflow(
 @router.post(
     "/execute",
     response_model=WorkflowExecutionResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=http_status.HTTP_202_ACCEPTED,
     summary="Execute a workflow",
     description="Start execution of a workflow with provided inputs",
 )
@@ -219,12 +219,12 @@ async def execute_workflow(
         
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to execute workflow: {str(e)}"
         )
 
@@ -248,7 +248,7 @@ async def get_execution_status(
         
         if not execution:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail=f"Execution {execution_id} not found"
             )
         
@@ -267,7 +267,7 @@ async def get_execution_status(
         
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve execution status: {str(e)}"
         )
 
@@ -333,6 +333,6 @@ async def list_workflows(
         
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list workflows: {str(e)}"
         )

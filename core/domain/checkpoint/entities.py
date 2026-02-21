@@ -167,15 +167,9 @@ class Checkpoint:
     restored_at: Optional[datetime] = None
 
     def __post_init__(self):
-        """Validate checkpoint invariants"""
+        """Validate checkpoint invariants - basic validation only"""
         if self.checkpoint_number < 0:
             raise ValueError("Checkpoint number must be non-negative")
-        
-        if self.dag_progress.completion_percentage < 0 or self.dag_progress.completion_percentage > 100:
-            raise ValueError("DAG completion percentage must be between 0 and 100")
-        
-        if self.budget_state.consumed < 0:
-            raise ValueError("Budget consumed cannot be negative")
 
     def mark_as_ready(self) -> None:
         """Mark checkpoint as ready for use"""

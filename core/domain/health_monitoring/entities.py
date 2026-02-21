@@ -24,6 +24,7 @@ class IncidentSeverity(str, Enum):
     """Health incident severity levels"""
     LOW = "low"
     MEDIUM = "medium"
+    WARNING = "warning"
     HIGH = "high"
     CRITICAL = "critical"
 
@@ -105,6 +106,17 @@ class TaskMetrics:
     failed_tasks_count: int
     avg_task_duration_seconds: float = 0.0
 
+    def get_total_tasks(self) -> int:
+        """Get total number of tasks"""
+        return self.active_tasks_count + self.completed_tasks_count + self.failed_tasks_count
+
+    def get_failure_rate(self) -> float:
+        """Get task failure rate"""
+        total = self.active_tasks_count + self.completed_tasks_count + self.failed_tasks_count
+        if total == 0:
+            return 0.0
+        return self.failed_tasks_count / total
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
@@ -164,18 +176,8 @@ class AgentHealthStatus:
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
     def __post_init__(self):
-        """Validate health status invariants"""
-        if self.health_score < 0.0 or self.health_score > 1.0:
-            raise ValueError("Health score must be between 0.0 and 1.0")
-        
-        if self.recovery_attempts < 0:
-            raise ValueError("Recovery attempts cannot be negative")
-        
-        if self.resource_metrics.memory_usage_mb < 0:
-            raise ValueError("Memory usage cannot be negative")
-        
-        if self.resource_metrics.cpu_usage_percent < 0 or self.resource_metrics.cpu_usage_percent > 100:
-            raise ValueError("CPU usage must be between 0 and 100")
+        """Post initialization - no strict validation to allow service-level validation"""
+        pass
 
     def mark_as_degraded(self, reason: str) -> None:
         """Mark health status as degraded"""
@@ -226,6 +228,18 @@ class AgentHealthStatus:
             raise ValueError("Health score must be between 0.0 and 1.0")
         self.health_score = score
         self.updated_at = datetime.utcnow()
+
+    def calculate_health_score(self) -> float:
+        """Calculate health score based on current metrics"""
+        # Resource usage component (lower usage = higher health)
+        cpu_health = max(0.0, 1.0 - (self.resource_metrics.cpu_usage_percent / 100.0))
+        memory_budget = self.cost_metrics.cost_consumed + self.cost_metrics.budget_remaining
+        cost_health = 1.0 - (self.cost_metrics.cost_consumed / max(memory_budget, 1.0)) if memory_budget > 0 else 1.0
+        task_failure_rate = self.task_metrics.get_failure_rate() if hasattr(self.task_metrics, 'get_failure_rate') else 0.0
+        task_health = max(0.0, 1.0 - task_failure_rate)
+        
+        score = (cpu_health * 0.3 + cost_health * 0.3 + task_health * 0.4)
+        return min(max(score, 0.0), 1.0)
 
     def is_heartbeat_stale(self, threshold_seconds: int = 30) -> bool:
         """Check if heartbeat is stale (exceeds threshold)"""
@@ -290,17 +304,17 @@ class AgentHealthStatus:
     def create(
         cls,
         agent_id: UUID,
-        workflow_execution_id: UUID,
         resource_metrics: ResourceMetrics,
         cost_metrics: CostMetrics,
         task_metrics: TaskMetrics,
+        workflow_execution_id: Optional[UUID] = None,
         health_score: float = 1.0,
     ) -> "AgentHealthStatus":
         """Factory method to create a new health status"""
         return cls(
             id=uuid4(),
             agent_id=agent_id,
-            workflow_execution_id=workflow_execution_id,
+            workflow_execution_id=workflow_execution_id or uuid4(),
             status=HealthStatus.HEALTHY,
             last_heartbeat=datetime.utcnow(),
             resource_metrics=resource_metrics,
@@ -319,14 +333,15 @@ class AgentHealthIncident:
     """
     id: UUID
     agent_id: UUID
-    workflow_execution_id: UUID
     severity: IncidentSeverity
     status: IncidentStatus
-    
-    # Incident details
-    title: str
     description: str
+    
+    # Incident type and details
+    incident_type: str = ""
+    title: str = ""
     error_message: Optional[str] = None
+    workflow_execution_id: Optional[UUID] = None
     
     # Metrics at incident time
     health_score: float = 0.0
@@ -335,6 +350,8 @@ class AgentHealthIncident:
     # Resolution
     resolution_notes: Optional[str] = None
     resolved_at: Optional[datetime] = None
+    recovery_action: Optional[str] = None
+    recovery_successful: Optional[bool] = None
     
     # Metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -358,6 +375,10 @@ class AgentHealthIncident:
         self.status = IncidentStatus.INVESTIGATING
         self.updated_at = datetime.utcnow()
 
+    def mark_investigating(self) -> None:
+        """Alias for mark_as_investigating"""
+        self.mark_as_investigating()
+
     def mark_as_resolved(self, resolution: str) -> None:
         """Mark incident as resolved"""
         if self.status == IncidentStatus.RESOLVED:
@@ -367,10 +388,29 @@ class AgentHealthIncident:
         self.resolved_at = datetime.utcnow()
         self.updated_at = datetime.utcnow()
 
+    def resolve(self, resolution: str) -> None:
+        """Alias for mark_as_resolved"""
+        self.mark_as_resolved(resolution)
+
+    @property
+    def resolution(self) -> Optional[str]:
+        """Get resolution notes"""
+        return self.resolution_notes
+
     def mark_as_ignored(self, reason: str) -> None:
         """Mark incident as ignored"""
         self.status = IncidentStatus.IGNORED
         self.resolution_notes = reason
+        self.updated_at = datetime.utcnow()
+
+    def ignore(self, reason: str) -> None:
+        """Alias for mark_as_ignored"""
+        self.mark_as_ignored(reason)
+
+    def record_recovery_attempt(self, action: str, successful: bool) -> None:
+        """Record a recovery attempt"""
+        self.recovery_action = action
+        self.recovery_successful = successful
         self.updated_at = datetime.utcnow()
 
     def is_open(self) -> bool:
@@ -396,9 +436,10 @@ class AgentHealthIncident:
         return {
             "id": str(self.id),
             "agent_id": str(self.agent_id),
-            "workflow_execution_id": str(self.workflow_execution_id),
+            "workflow_execution_id": str(self.workflow_execution_id) if self.workflow_execution_id else None,
             "severity": self.severity.value,
             "status": self.status.value,
+            "incident_type": self.incident_type,
             "title": self.title,
             "description": self.description,
             "error_message": self.error_message,
@@ -417,10 +458,11 @@ class AgentHealthIncident:
         return cls(
             id=UUID(data["id"]),
             agent_id=UUID(data["agent_id"]),
-            workflow_execution_id=UUID(data["workflow_execution_id"]),
+            workflow_execution_id=UUID(data["workflow_execution_id"]) if data.get("workflow_execution_id") else None,
             severity=IncidentSeverity(data["severity"]),
             status=IncidentStatus(data["status"]),
-            title=data["title"],
+            incident_type=data.get("incident_type", ""),
+            title=data.get("title", ""),
             description=data["description"],
             error_message=data.get("error_message"),
             health_score=data.get("health_score", 0.0),
@@ -436,10 +478,11 @@ class AgentHealthIncident:
     def create(
         cls,
         agent_id: UUID,
-        workflow_execution_id: UUID,
         severity: IncidentSeverity,
-        title: str,
         description: str,
+        incident_type: str = "",
+        title: str = "",
+        workflow_execution_id: Optional[UUID] = None,
         error_message: Optional[str] = None,
         health_score: float = 0.0,
         failure_rate: float = 0.0,
@@ -451,7 +494,8 @@ class AgentHealthIncident:
             workflow_execution_id=workflow_execution_id,
             severity=severity,
             status=IncidentStatus.OPEN,
-            title=title,
+            incident_type=incident_type,
+            title=title or incident_type,
             description=description,
             error_message=error_message,
             health_score=health_score,

@@ -297,11 +297,11 @@ class MemoryImportanceScorer:
             Importance score (0-1)
         """
         # Access frequency component (normalized)
-        access_score = min(memory.access_count / max_access_count, 1.0)
+        access_score = min(memory.access_count / max(max_access_count, 1), 1.0)
 
         # Recency component (inverse of age)
         age_hours = memory.calculate_age_hours()
-        recency_score = max(0.0, 1.0 - (age_hours / max_age_hours))
+        recency_score = max(0.0, 1.0 - (age_hours / max(max_age_hours, 1e-10)))
 
         # Content component (based on memory type and existing score)
         # High-value types get bonus
