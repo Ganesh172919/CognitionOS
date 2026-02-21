@@ -312,6 +312,10 @@ app.include_router(intelligence.router)
 from services.api.src.routes import platform as platform_router
 app.include_router(platform_router.router)
 
+# Import and include SaaS platform routes (subscriptions, tenants, usage, rate limits)
+from services.api.src.routes import saas_platform
+app.include_router(saas_platform.router)
+
 
 # ==================== Main Entry Point ====================
 
