@@ -14,6 +14,17 @@ from .orchestrator import (
     WorkflowExecution,
     WorkflowEvent
 )
+from .state_machine import (
+    StateMachine,
+    MachineInstance,
+    State,
+    StateType,
+    Transition,
+    MachineContext,
+    TransitionRecord,
+    build_workflow_machine,
+    build_agent_machine,
+)
 
 __all__ = [
     "WorkflowOrchestrationEngine",
@@ -24,5 +35,14 @@ __all__ = [
     "TaskExecution",
     "WorkflowDefinition",
     "WorkflowExecution",
-    "WorkflowEvent"
+    "WorkflowEvent",
+    "StateMachine",
+    "MachineInstance",
+    "State",
+    "StateType",
+    "Transition",
+    "MachineContext",
+    "TransitionRecord",
+    "build_workflow_machine",
+    "build_agent_machine",
 ]

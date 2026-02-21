@@ -304,6 +304,10 @@ app.include_router(developer_tools.router)
 from services.api.src.routes import reliability_workflows
 app.include_router(reliability_workflows.router)
 
+# Import and include intelligence routes (LLM router, tools, memory, telemetry, billing)
+from services.api.src.routes import intelligence
+app.include_router(intelligence.router)
+
 
 # ==================== Main Entry Point ====================
 
