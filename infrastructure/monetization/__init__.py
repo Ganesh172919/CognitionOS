@@ -18,12 +18,14 @@ from .feature_flags import (
 from .subscription_lifecycle import (
     SubscriptionLifecycleManager,
     UpgradeWorkflow,
-    DowngradeWorkflow
+    DowngradeWorkflow,
+    SubscriptionChange
 )
 from .abuse_detection import (
     AbuseDetector,
     AbusePattern,
-    AbuseAction
+    AbuseAction,
+    AbuseIncident
 )
 from .revenue_analytics import (
     RevenueAnalytics,
@@ -41,9 +43,11 @@ __all__ = [
     "SubscriptionLifecycleManager",
     "UpgradeWorkflow",
     "DowngradeWorkflow",
+    "SubscriptionChange",
     "AbuseDetector",
     "AbusePattern",
     "AbuseAction",
+    "AbuseIncident",
     "RevenueAnalytics",
     "RevenueMetrics",
     "ForecastEngine"
