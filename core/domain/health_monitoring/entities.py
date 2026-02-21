@@ -235,7 +235,7 @@ class AgentHealthStatus:
         cpu_health = max(0.0, 1.0 - (self.resource_metrics.cpu_usage_percent / 100.0))
         memory_budget = self.cost_metrics.cost_consumed + self.cost_metrics.budget_remaining
         cost_health = 1.0 - (self.cost_metrics.cost_consumed / max(memory_budget, 1.0)) if memory_budget > 0 else 1.0
-        task_failure_rate = self.task_metrics.get_failure_rate() if hasattr(self.task_metrics, 'get_failure_rate') else 0.0
+        task_failure_rate = self.task_metrics.get_failure_rate()
         task_health = max(0.0, 1.0 - task_failure_rate)
         
         score = (cpu_health * 0.3 + cost_health * 0.3 + task_health * 0.4)

@@ -44,6 +44,9 @@ class SubscriptionModel(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     subscription_metadata = Column("metadata", JSON, nullable=False, default={})
 
+    def __repr__(self):
+        return f"<SubscriptionModel(id={self.id}, tenant_id={self.tenant_id}, tier={self.tier}, status={self.status})>"
+
 
 class InvoiceModel(Base):
     """SQLAlchemy model for Invoice entity"""

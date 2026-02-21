@@ -45,6 +45,9 @@ class ReplaySessionModel(Base):
     
     def __repr__(self):
         return f"<ReplaySessionModel(id={self.id}, mode={self.replay_mode}, status={self.status})>"
+
+
+class ExecutionSnapshotModel(Base):
     """SQLAlchemy model for ExecutionSnapshot entity"""
     
     __tablename__ = "execution_snapshots"
@@ -148,6 +151,10 @@ class PostgreSQLReplaySessionRepository:
             started_at=model.started_at,
             completed_at=model.completed_at,
             metadata=model.replay_metadata or {},
+        )
+
+
+class PostgreSQLExecutionSnapshotRepository:
     """PostgreSQL repository for ExecutionSnapshot"""
     
     def __init__(self, session: AsyncSession):
@@ -223,3 +230,5 @@ class PostgreSQLReplaySessionRepository:
             created_by=model.created_by,
             snapshot_size_bytes=model.snapshot_size_bytes,
             metadata=model.snapshot_metadata or {},
+            created_at=model.created_at,
+        )
