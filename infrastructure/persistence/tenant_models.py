@@ -35,7 +35,7 @@ class TenantModel(Base):
     trial_ends_at = Column(DateTime(timezone=True), nullable=True)
     suspended_at = Column(DateTime(timezone=True), nullable=True)
     suspended_reason = Column(String, nullable=True)
-    metadata = Column(JSON, nullable=False, default={})
+    tenant_metadata = Column("metadata", JSON, nullable=False, default={})
     
     def __repr__(self):
         return f"<TenantModel(id={self.id}, name={self.name}, slug={self.slug}, status={self.status})>"

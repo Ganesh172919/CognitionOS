@@ -254,7 +254,7 @@ class PostgreSQLWorkingMemoryRepository(WorkingMemoryRepository):
             embedding = MemoryEmbedding(
                 vector=model.embedding,
                 model="text-embedding-ada-002",
-                dimension=1536,
+                dimensions=1536,
             )
         
         return WorkingMemory(
@@ -481,7 +481,7 @@ class PostgreSQLEpisodicMemoryRepository(EpisodicMemoryRepository):
             embedding = MemoryEmbedding(
                 vector=model.embedding,
                 model="text-embedding-ada-002",
-                dimension=1536,
+                dimensions=1536,
             )
         
         temporal_period = {
@@ -745,7 +745,7 @@ class PostgreSQLLongTermMemoryRepository(LongTermMemoryRepository):
             embedding = MemoryEmbedding(
                 vector=model.embedding,
                 model="text-embedding-ada-002",
-                dimension=1536,
+                dimensions=1536,
             )
         
         return LongTermMemory(

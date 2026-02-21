@@ -40,7 +40,7 @@ class ReplaySessionModel(Base):
     divergence_details = Column(JSON, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    metadata = Column(JSON, nullable=True)
+    replay_metadata = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     
     def __repr__(self):
@@ -63,7 +63,7 @@ class ExecutionSnapshotModel(Base):
     failed_steps = Column(JSON, nullable=False, default=list)  # List of step IDs
     created_by = Column(String(255), nullable=False, default="system")
     snapshot_size_bytes = Column(Integer, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    snapshot_metadata = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     
     def __repr__(self):
@@ -91,7 +91,7 @@ class PostgreSQLReplaySessionRepository:
             existing.divergence_details = replay_session.divergence_details
             existing.started_at = replay_session.started_at
             existing.completed_at = replay_session.completed_at
-            existing.metadata = replay_session.metadata
+            existing.replay_metadata = replay_session.metadata
         else:
             # Create new
             model = ReplaySessionModel(
@@ -107,8 +107,7 @@ class PostgreSQLReplaySessionRepository:
                 divergence_details=replay_session.divergence_details,
                 started_at=replay_session.started_at,
                 completed_at=replay_session.completed_at,
-                metadata=replay_session.metadata,
-                created_at=replay_session.created_at,
+                replay_metadata=replay_session.metadata,
             )
             self.session.add(model)
         
@@ -151,8 +150,7 @@ class PostgreSQLReplaySessionRepository:
             divergence_details=model.divergence_details or {},
             started_at=model.started_at,
             completed_at=model.completed_at,
-            metadata=model.metadata or {},
-            created_at=model.created_at,
+            metadata=model.replay_metadata or {},
         )
 
 
@@ -176,8 +174,7 @@ class PostgreSQLExecutionSnapshotRepository:
             failed_steps=snapshot.failed_steps,
             created_by=snapshot.created_by,
             snapshot_size_bytes=snapshot.snapshot_size_bytes,
-            metadata=snapshot.metadata,
-            created_at=snapshot.created_at,
+            snapshot_metadata=snapshot.metadata,
         )
         self.session.add(model)
         await self.session.flush()
@@ -232,6 +229,6 @@ class PostgreSQLExecutionSnapshotRepository:
             failed_steps=model.failed_steps or [],
             created_by=model.created_by,
             snapshot_size_bytes=model.snapshot_size_bytes,
-            metadata=model.metadata or {},
+            metadata=model.snapshot_metadata or {},
             created_at=model.created_at,
         )

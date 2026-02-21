@@ -205,7 +205,7 @@ class PostgreSQLSubscriptionRepository(SubscriptionRepository):
             subscription_model.billing_cycle = subscription.billing_cycle
             subscription_model.payment_method = self._payment_method_to_dict(subscription.payment_method) if subscription.payment_method else None
             subscription_model.updated_at = subscription.updated_at
-            subscription_model.metadata = subscription.metadata
+            subscription_model.subscription_metadata = subscription.metadata
             
             await self.session.flush()
             await self.session.refresh(subscription_model)
@@ -258,7 +258,7 @@ class PostgreSQLSubscriptionRepository(SubscriptionRepository):
             payment_method=payment_method,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            metadata=model.metadata or {},
+            metadata=model.subscription_metadata or {},
         )
     
     def _to_model(self, entity: Subscription) -> SubscriptionModel:
@@ -282,7 +282,7 @@ class PostgreSQLSubscriptionRepository(SubscriptionRepository):
             payment_method=self._payment_method_to_dict(entity.payment_method) if entity.payment_method else None,
             created_at=entity.created_at,
             updated_at=entity.updated_at,
-            metadata=entity.metadata,
+            subscription_metadata=entity.metadata,
         )
     
     def _payment_method_to_dict(self, payment_method: PaymentMethod) -> dict:
@@ -475,7 +475,7 @@ class PostgreSQLInvoiceRepository(InvoiceRepository):
             invoice_model.due_date = invoice.due_date
             invoice_model.paid_at = invoice.paid_at
             invoice_model.line_items = invoice.line_items
-            invoice_model.metadata = invoice.metadata
+            invoice_model.invoice_metadata = invoice.metadata
             
             await self.session.flush()
             await self.session.refresh(invoice_model)
@@ -524,7 +524,7 @@ class PostgreSQLInvoiceRepository(InvoiceRepository):
             paid_at=model.paid_at,
             created_at=model.created_at,
             line_items=model.line_items or [],
-            metadata=model.metadata or {},
+            metadata=model.invoice_metadata or {},
         )
     
     def _to_model(self, entity: Invoice) -> InvoiceModel:
@@ -546,7 +546,7 @@ class PostgreSQLInvoiceRepository(InvoiceRepository):
             paid_at=entity.paid_at,
             created_at=entity.created_at,
             line_items=entity.line_items,
-            metadata=entity.metadata,
+            invoice_metadata=entity.metadata,
         )
 
 
@@ -719,7 +719,7 @@ class PostgreSQLUsageRecordRepository(UsageRecordRepository):
             quantity=model.quantity,
             unit=model.unit,
             timestamp=model.timestamp,
-            metadata=model.metadata or {},
+            metadata=model.usage_metadata or {},
         )
     
     def _to_model(self, entity: UsageRecord) -> UsageRecordModel:
@@ -731,5 +731,5 @@ class PostgreSQLUsageRecordRepository(UsageRecordRepository):
             quantity=entity.quantity,
             unit=entity.unit,
             timestamp=entity.timestamp,
-            metadata=entity.metadata,
+            usage_metadata=entity.metadata,
         )

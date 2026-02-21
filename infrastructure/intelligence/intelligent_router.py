@@ -127,7 +127,7 @@ class IntelligentModelRouter:
         # Cost constraints
         self.max_cost_per_request = self.config.get("max_cost_per_request", 0.10)
         
-        logger.info("IntelligentModelRouter initialized with {} models", len(self.model_catalog))
+        logger.info("IntelligentModelRouter initialized with %d models", len(self.model_catalog))
     
     async def classify_task_complexity(
         self,

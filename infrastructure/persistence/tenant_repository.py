@@ -104,7 +104,7 @@ class PostgreSQLTenantRepository(TenantRepository):
             tenant_model.suspended_at = tenant.suspended_at
             tenant_model.suspended_reason = tenant.suspended_reason
             tenant_model.updated_at = tenant.updated_at
-            tenant_model.metadata = tenant.metadata
+            tenant_model.tenant_metadata = tenant.metadata
             
             await self.session.flush()
             await self.session.refresh(tenant_model)
@@ -182,7 +182,7 @@ class PostgreSQLTenantRepository(TenantRepository):
             suspended_reason=model.suspended_reason,
             owner_user_id=model.owner_user_id,
             billing_email=model.billing_email,
-            metadata=model.metadata or {},
+            metadata=model.tenant_metadata or {},
         )
     
     def _to_model(self, entity: Tenant) -> TenantModel:
@@ -201,7 +201,7 @@ class PostgreSQLTenantRepository(TenantRepository):
             trial_ends_at=entity.trial_ends_at,
             suspended_at=entity.suspended_at,
             suspended_reason=entity.suspended_reason,
-            metadata=entity.metadata,
+            tenant_metadata=entity.metadata,
         )
     
     def _settings_to_dict(self, settings: TenantSettings) -> dict:

@@ -8,7 +8,7 @@ NO external dependencies except Python stdlib.
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID, uuid4
 
 
@@ -26,6 +26,7 @@ class MemoryType(str, Enum):
     RESULT = "result"
     REASONING = "reasoning"
     METADATA = "metadata"
+    FACT = "fact"
 
 
 class KnowledgeType(str, Enum):
@@ -34,6 +35,7 @@ class KnowledgeType(str, Enum):
     PROCEDURAL = "procedural"
     CONCEPTUAL = "conceptual"
     STRATEGIC = "strategic"
+    SEMANTIC = "semantic"
 
 
 class SourceType(str, Enum):
@@ -50,28 +52,32 @@ class MemoryEmbedding:
     """Memory embedding value object"""
     vector: List[float]
     model: str
-    dimension: int
+    dimensions: int = 0
 
     def __post_init__(self):
         """Validate embedding invariants"""
-        if len(self.vector) != self.dimension:
-            raise ValueError(f"Vector length {len(self.vector)} does not match dimension {self.dimension}")
+        # If dimensions is not set, infer from vector length
+        if self.dimensions == 0:
+            object.__setattr__(self, 'dimensions', len(self.vector))
+        if len(self.vector) != self.dimensions:
+            raise ValueError(f"Vector length {len(self.vector)} does not match dimensions {self.dimensions}")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
             "vector": self.vector,
             "model": self.model,
-            "dimension": self.dimension,
+            "dimensions": self.dimensions,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MemoryEmbedding":
         """Create from dictionary"""
+        vector = data["vector"]
         return cls(
-            vector=data["vector"],
-            model=data["model"],
-            dimension=data["dimension"],
+            vector=vector,
+            model=data.get("model", "unknown"),
+            dimensions=data.get("dimensions", data.get("dimension", len(vector))),
         )
 
 
@@ -124,13 +130,14 @@ class WorkingMemory:
     def create(
         cls,
         agent_id: UUID,
-        workflow_execution_id: UUID,
-        content: str,
+        workflow_execution_id: Optional[UUID] = None,
+        content: str = "",
         importance_score: float = 0.5,
-        embedding: Optional[MemoryEmbedding] = None,
+        embedding: Optional[Union[MemoryEmbedding, List[float]]] = None,
         memory_type: MemoryType = MemoryType.OBSERVATION,
         tags: Optional[List[str]] = None,
         expires_at: Optional[datetime] = None,
+        ttl_hours: Optional[float] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "WorkingMemory":
         """
@@ -138,18 +145,25 @@ class WorkingMemory:
         
         Args:
             agent_id: Agent ID
-            workflow_execution_id: Workflow execution ID
+            workflow_execution_id: Workflow execution ID (optional)
             content: Memory content
             importance_score: Importance score (0-1)
-            embedding: Optional embedding
+            embedding: Optional embedding (MemoryEmbedding or raw vector)
             memory_type: Type of memory
             tags: Optional tags
             expires_at: Optional expiration time
+            ttl_hours: Optional TTL in hours (alternative to expires_at)
             metadata: Optional metadata
             
         Returns:
             New WorkingMemory instance
         """
+        if ttl_hours is not None and expires_at is None:
+            expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+        if isinstance(embedding, list):
+            embedding = MemoryEmbedding(vector=embedding, model="unknown")
+        if workflow_execution_id is None:
+            workflow_execution_id = uuid4()
         return cls(
             id=uuid4(),
             agent_id=agent_id,
@@ -191,7 +205,7 @@ class WorkingMemory:
         self,
         min_importance: float = 0.7,
         min_access_count: int = 3,
-        min_age_hours: float = 1.0,
+        min_age_hours: float = 0.0,
     ) -> bool:
         """
         Determine if memory should be promoted to L2.
@@ -209,6 +223,12 @@ class WorkingMemory:
             and self.access_count >= min_access_count
             and self.calculate_age_hours() >= min_age_hours
         )
+
+    def is_expired(self) -> bool:
+        """Check if memory has expired"""
+        if self.expires_at is None:
+            return False
+        return datetime.utcnow() > self.expires_at
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
@@ -303,13 +323,13 @@ class EpisodicMemory:
     def create(
         cls,
         agent_id: UUID,
-        cluster_id: str,
         summary: str,
-        source_memory_ids: List[UUID],
-        temporal_start: datetime,
-        temporal_end: datetime,
+        cluster_id: Optional[str] = None,
+        source_memory_ids: Optional[List[UUID]] = None,
+        temporal_start: Optional[datetime] = None,
+        temporal_end: Optional[datetime] = None,
         importance_score: float = 0.6,
-        embedding: Optional[MemoryEmbedding] = None,
+        embedding: Optional[Union[MemoryEmbedding, List[float]]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "EpisodicMemory":
         """
@@ -317,18 +337,28 @@ class EpisodicMemory:
         
         Args:
             agent_id: Agent ID
-            cluster_id: Cluster identifier
             summary: Compressed summary
+            cluster_id: Cluster identifier (optional, auto-generated if not provided)
             source_memory_ids: Source working memory IDs
             temporal_start: Start of temporal period
             temporal_end: End of temporal period
             importance_score: Importance score (0-1)
-            embedding: Optional embedding
+            embedding: Optional embedding (MemoryEmbedding or raw vector)
             metadata: Optional metadata
             
         Returns:
             New EpisodicMemory instance
         """
+        if isinstance(embedding, list):
+            embedding = MemoryEmbedding(vector=embedding, model="unknown")
+        if cluster_id is None:
+            cluster_id = str(uuid4())
+        if source_memory_ids is None:
+            source_memory_ids = []
+        if temporal_start is None:
+            temporal_start = datetime.utcnow()
+        if temporal_end is None:
+            temporal_end = datetime.utcnow()
         return cls(
             id=uuid4(),
             agent_id=agent_id,
@@ -343,6 +373,16 @@ class EpisodicMemory:
             metadata=metadata or {},
         )
 
+    @property
+    def temporal_start(self) -> Optional[datetime]:
+        """Get temporal period start"""
+        return self.temporal_period.get("start")
+
+    @property
+    def temporal_end(self) -> Optional[datetime]:
+        """Get temporal period end"""
+        return self.temporal_period.get("end")
+
     def add_source_memory(self, memory_id: UUID) -> None:
         """Add a source memory ID to this episode"""
         if memory_id not in self.source_memory_ids:
@@ -350,12 +390,13 @@ class EpisodicMemory:
             self.source_memory_count = len(self.source_memory_ids)
             self.updated_at = datetime.utcnow()
 
-    def calculate_compression_ratio(self, original_total_length: int) -> float:
+    def calculate_compression_ratio(self, original_total_length: int, compressed_length: Optional[int] = None) -> float:
         """
         Calculate compression ratio based on original content.
         
         Args:
             original_total_length: Total length of source memories
+            compressed_length: Length of compressed content (uses summary length if not provided)
             
         Returns:
             Compression ratio (compressed/original)
@@ -363,7 +404,10 @@ class EpisodicMemory:
         if original_total_length == 0:
             return 0.0
         
-        self.compression_ratio = len(self.summary) / original_total_length
+        if compressed_length is None:
+            compressed_length = len(self.summary)
+        
+        self.compression_ratio = compressed_length / original_total_length
         return self.compression_ratio
 
     def to_dict(self) -> Dict[str, Any]:
@@ -461,9 +505,9 @@ class LongTermMemory:
         knowledge_type: KnowledgeType,
         title: str,
         content: str,
-        source_type: SourceType,
+        source_type: SourceType = SourceType.MANUAL_ENTRY,
         importance_score: float = 0.8,
-        embedding: Optional[MemoryEmbedding] = None,
+        embedding: Optional[Union[MemoryEmbedding, List[float]]] = None,
         source_references: Optional[List[UUID]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "LongTermMemory":
@@ -477,13 +521,15 @@ class LongTermMemory:
             content: Knowledge content
             source_type: Source of knowledge
             importance_score: Importance score (0-1)
-            embedding: Optional embedding
+            embedding: Optional embedding (MemoryEmbedding or raw vector)
             source_references: Optional source reference IDs
             metadata: Optional metadata
             
         Returns:
             New LongTermMemory instance
         """
+        if isinstance(embedding, list):
+            embedding = MemoryEmbedding(vector=embedding, model="unknown")
         return cls(
             id=uuid4(),
             agent_id=agent_id,

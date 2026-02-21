@@ -19,6 +19,7 @@ class BudgetStatus(str, Enum):
     CRITICAL = "critical"
     EXHAUSTED = "exhausted"
     COMPLETED = "completed"
+    SUSPENDED = "suspended"
 
 
 class OperationType(str, Enum):
@@ -27,6 +28,8 @@ class OperationType(str, Enum):
     STORAGE = "storage"
     COMPUTE = "compute"
     MEMORY_OPERATION = "memory_operation"
+    AGENT_EXECUTION = "agent_execution"
+    API_CALL = "api_call"
 
 
 # ==================== Entities ====================
@@ -154,6 +157,7 @@ class WorkflowBudget:
 
     def suspend(self) -> None:
         """Suspend the budget"""
+        self.status = BudgetStatus.SUSPENDED
         self.suspended_at = datetime.utcnow()
         self.updated_at = datetime.utcnow()
 
