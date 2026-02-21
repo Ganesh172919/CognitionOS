@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import (
     Column, String, DateTime, Enum as SQLEnum, Integer, Boolean, JSON, DECIMAL, ForeignKey
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 from infrastructure.persistence.base import Base
@@ -42,10 +42,7 @@ class SubscriptionModel(Base):
     payment_method = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    metadata = Column(JSON, nullable=False, default={})
-    
-    def __repr__(self):
-        return f"<SubscriptionModel(id={self.id}, tenant_id={self.tenant_id}, tier={self.tier}, status={self.status})>"
+    subscription_metadata = Column("metadata", JSON, nullable=False, default={})
 
 
 class InvoiceModel(Base):
@@ -73,7 +70,7 @@ class InvoiceModel(Base):
     paid_at = Column(DateTime(timezone=True), nullable=True, index=True)
     line_items = Column(JSON, nullable=False, default=[])
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, index=True)
-    metadata = Column(JSON, nullable=False, default={})
+    invoice_metadata = Column("metadata", JSON, nullable=False, default={})
     
     def __repr__(self):
         return f"<InvoiceModel(id={self.id}, invoice_number={self.invoice_number}, status={self.status})>"
@@ -90,35 +87,11 @@ class UsageRecordModel(Base):
     quantity = Column(DECIMAL(20, 6), nullable=False)
     unit = Column(String(50), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, index=True)
-    metadata = Column(JSON, nullable=False, default={})
+    usage_metadata = Column("metadata", JSON, nullable=False, default={})
     
     def __repr__(self):
         return f"<UsageRecordModel(id={self.id}, tenant_id={self.tenant_id}, resource_type={self.resource_type}, quantity={self.quantity})>"
 
-
-class ApiKeyModel(Base):
-    """SQLAlchemy model for API Key entity"""
-    
-    __tablename__ = "api_keys"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    key_hash = Column(String(255), nullable=False, unique=True, index=True)
-    key_prefix = Column(String(20), nullable=False, index=True)
-    name = Column(String(255), nullable=False)
-    scopes = Column(ARRAY(String), nullable=False, default=[])
-    rate_limit_per_minute = Column(Integer, nullable=True, default=60)
-    is_active = Column(Boolean, nullable=False, default=True, index=True)
-    last_used_at = Column(DateTime(timezone=True), nullable=True)
-    expires_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
-    revoked_by_user_id = Column(UUID(as_uuid=True), nullable=True)
-    metadata = Column(JSON, nullable=False, default={})
-    
-    def __repr__(self):
-        return f"<ApiKeyModel(id={self.id}, tenant_id={self.tenant_id}, key_prefix={self.key_prefix}, is_active={self.is_active})>"
 
 
 class RateLimitTrackingModel(Base):

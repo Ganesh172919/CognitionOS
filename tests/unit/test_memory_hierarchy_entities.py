@@ -316,6 +316,6 @@ class TestMemoryTier:
     
     def test_memory_tier_values(self):
         """Test memory tier enum values"""
-        assert MemoryTier.L1_WORKING.value == "L1_working"
-        assert MemoryTier.L2_EPISODIC.value == "L2_episodic"
-        assert MemoryTier.L3_LONGTERM.value == "L3_longterm"
+        assert MemoryTier.L1_WORKING.value == "l1_working"
+        assert MemoryTier.L2_EPISODIC.value == "l2_episodic"
+        assert MemoryTier.L3_LONGTERM.value == "l3_longterm"

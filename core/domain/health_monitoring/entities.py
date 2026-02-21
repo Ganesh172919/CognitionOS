@@ -43,8 +43,11 @@ class ResourceMetrics:
     """Resource usage metrics snapshot"""
     memory_usage_mb: float
     cpu_usage_percent: float
-    working_memory_count: int
-    episodic_memory_count: int
+    working_memory_count: int = 0
+    episodic_memory_count: int = 0
+    disk_usage_percent: float = 0.0
+    network_rx_mb: float = 0.0
+    network_tx_mb: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
@@ -53,6 +56,9 @@ class ResourceMetrics:
             "cpu_usage_percent": self.cpu_usage_percent,
             "working_memory_count": self.working_memory_count,
             "episodic_memory_count": self.episodic_memory_count,
+            "disk_usage_percent": self.disk_usage_percent,
+            "network_rx_mb": self.network_rx_mb,
+            "network_tx_mb": self.network_tx_mb,
         }
 
     @classmethod
@@ -63,6 +69,9 @@ class ResourceMetrics:
             cpu_usage_percent=data.get("cpu_usage_percent", 0.0),
             working_memory_count=data.get("working_memory_count", 0),
             episodic_memory_count=data.get("episodic_memory_count", 0),
+            disk_usage_percent=data.get("disk_usage_percent", 0.0),
+            network_rx_mb=data.get("network_rx_mb", 0.0),
+            network_tx_mb=data.get("network_tx_mb", 0.0),
         )
 
 
@@ -94,6 +103,7 @@ class TaskMetrics:
     active_tasks_count: int
     completed_tasks_count: int
     failed_tasks_count: int
+    avg_task_duration_seconds: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
@@ -101,6 +111,7 @@ class TaskMetrics:
             "active_tasks_count": self.active_tasks_count,
             "completed_tasks_count": self.completed_tasks_count,
             "failed_tasks_count": self.failed_tasks_count,
+            "avg_task_duration_seconds": self.avg_task_duration_seconds,
         }
 
     @classmethod
@@ -110,6 +121,7 @@ class TaskMetrics:
             active_tasks_count=data.get("active_tasks_count", 0),
             completed_tasks_count=data.get("completed_tasks_count", 0),
             failed_tasks_count=data.get("failed_tasks_count", 0),
+            avg_task_duration_seconds=data.get("avg_task_duration_seconds", 0.0),
         )
 
 

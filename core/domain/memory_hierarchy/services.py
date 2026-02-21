@@ -442,7 +442,7 @@ class MemoryCompressionService:
         Returns:
             Cosine similarity (0-1)
         """
-        if embedding1.dimension != embedding2.dimension:
+        if embedding1.dimensions != embedding2.dimensions:
             raise ValueError("Embeddings must have same dimension")
 
         # Cosine similarity

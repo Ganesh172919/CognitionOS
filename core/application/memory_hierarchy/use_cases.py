@@ -202,7 +202,7 @@ class StoreWorkingMemoryUseCase:
             embedding = MemoryEmbedding(
                 vector=command.embedding.get("vector", []),
                 model=command.embedding.get("model", "unknown"),
-                dimension=command.embedding.get("dimension", 0),
+                dimensions=command.embedding.get("dimensions", command.embedding.get("dimension", 0)),
             )
 
         # Parse memory type

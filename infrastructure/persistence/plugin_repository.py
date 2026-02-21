@@ -429,7 +429,7 @@ class PostgreSQLPluginRepository(PluginRepository):
             success_count=model.success_count,
             failure_count=model.failure_count,
             average_execution_time_ms=model.average_execution_time_ms,
-            metadata=model.metadata or {}
+            metadata=model.plugin_metadata or {}
         )
     
     def _to_model(self, entity: Plugin) -> PluginModel:
@@ -508,7 +508,7 @@ class PostgreSQLPluginRepository(PluginRepository):
             updated_at=entity.updated_at,
             published_at=entity.published_at,
             deprecated_at=entity.deprecated_at,
-            metadata=entity.metadata
+            plugin_metadata=entity.metadata
         )
     
     def _update_model_from_entity(self, model: PluginModel, entity: Plugin) -> None:
@@ -575,7 +575,7 @@ class PostgreSQLPluginRepository(PluginRepository):
         model.updated_at = entity.updated_at
         model.published_at = entity.published_at
         model.deprecated_at = entity.deprecated_at
-        model.metadata = entity.metadata
+        model.plugin_metadata = entity.metadata
 
 
 class PostgreSQLPluginExecutionRepository(PluginExecutionRepository):

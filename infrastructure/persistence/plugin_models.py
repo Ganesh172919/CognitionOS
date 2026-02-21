@@ -73,8 +73,7 @@ class PluginModel(Base):
     published_at = Column(DateTime(timezone=True), nullable=True)
     deprecated_at = Column(DateTime(timezone=True), nullable=True)
     
-    # Metadata
-    metadata = Column(JSON, nullable=False, default={})
+    plugin_metadata = Column("metadata", JSON, nullable=False, default={})
     
     def __repr__(self):
         return f"<PluginModel(id={self.id}, name={self.name}, version={self.version_major}.{self.version_minor}.{self.version_patch}, status={self.status})>"

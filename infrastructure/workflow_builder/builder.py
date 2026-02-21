@@ -3,7 +3,7 @@ Workflow Automation Builder
 
 Visual workflow designer backend with template library and versioning.
 """
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
