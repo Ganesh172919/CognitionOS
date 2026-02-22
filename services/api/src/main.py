@@ -336,6 +336,10 @@ app.include_router(advanced_intelligence.router)
 from services.api.src.routes import phase5_intelligence
 app.include_router(phase5_intelligence.router)
 
+# Import and include Phase 6 systems routes (cognitive AI, multi-agent, collaboration, data mesh, security, workflows, profiling)
+from services.api.src.routes import phase6_systems
+app.include_router(phase6_systems.router)
+
 
 # ==================== Main Entry Point ====================
 
