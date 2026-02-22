@@ -328,6 +328,10 @@ app.include_router(enterprise_extended.router)
 from services.api.src.routes import revenue_intelligence
 app.include_router(revenue_intelligence.router)
 
+# Import and include Advanced Intelligence routes (ML pipeline, knowledge graph, self-healing, GraphQL, lakehouse)
+from services.api.src.routes import advanced_intelligence
+app.include_router(advanced_intelligence.router)
+
 
 # ==================== Main Entry Point ====================
 
