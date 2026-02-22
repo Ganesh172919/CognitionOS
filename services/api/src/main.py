@@ -324,6 +324,10 @@ app.include_router(enterprise_transformation.router)
 from services.api.src.routes import enterprise_extended
 app.include_router(enterprise_extended.router)
 
+# Import and include Revenue Intelligence routes (dynamic pricing, LTV, payments, AI code generation)
+from services.api.src.routes import revenue_intelligence
+app.include_router(revenue_intelligence.router)
+
 
 # ==================== Main Entry Point ====================
 
