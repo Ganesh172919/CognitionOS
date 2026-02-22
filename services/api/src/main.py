@@ -332,6 +332,10 @@ app.include_router(revenue_intelligence.router)
 from services.api.src.routes import advanced_intelligence
 app.include_router(advanced_intelligence.router)
 
+# Import and include Phase 5 Intelligence routes (federated learning, vector search, prompt engineering, tracing, zero-trust, load testing, SDK portal)
+from services.api.src.routes import phase5_intelligence
+app.include_router(phase5_intelligence.router)
+
 
 # ==================== Main Entry Point ====================
 
