@@ -1,13 +1,27 @@
-"""Multi-tier caching infrastructure."""
+"""
+Intelligent Caching Module
 
-from .multi_tier_cache import (
-    MultiTierCache,
-    get_cache,
-    cache_result,
+Multi-tier caching with predictive pre-warming and optimization.
+"""
+
+from .intelligent_cache_layer import (
+    IntelligentCacheLayer,
+    CacheCoordinator,
+    CacheEntry,
+    CacheStatistics,
+    CacheTier,
+    EvictionPolicy,
+    CacheStrategy,
+    LRUCache
 )
 
 __all__ = [
-    "MultiTierCache",
-    "get_cache",
-    "cache_result",
+    "IntelligentCacheLayer",
+    "CacheCoordinator",
+    "CacheEntry",
+    "CacheStatistics",
+    "CacheTier",
+    "EvictionPolicy",
+    "CacheStrategy",
+    "LRUCache",
 ]
