@@ -320,6 +320,10 @@ app.include_router(saas_platform.router)
 from services.api.src.routes import enterprise_transformation
 app.include_router(enterprise_transformation.router)
 
+# Import and include Enterprise Extended routes (webhooks, streams, code review, cost optimization, marketplace)
+from services.api.src.routes import enterprise_extended
+app.include_router(enterprise_extended.router)
+
 
 # ==================== Main Entry Point ====================
 
