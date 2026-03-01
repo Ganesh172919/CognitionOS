@@ -44,6 +44,11 @@ from core.domain.agent.entities import (
     BudgetUsage,
 )
 from core.exceptions import AgentException, ValidationError
+from core.application.execution_feedback_loop import (
+    ExecutionFeedbackLoop,
+    ExecutionFeedback,
+    FeedbackType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +72,7 @@ class CollaborativeAgentOrchestrator:
         multi_agent_coordinator: MultiAgentCoordinator,
         memory_service: Any,
         learning_service: Optional[Any] = None,
+        feedback_loop: Optional[ExecutionFeedbackLoop] = None,
     ):
         """
         Initialize collaborative orchestrator.
@@ -76,11 +82,13 @@ class CollaborativeAgentOrchestrator:
             multi_agent_coordinator: Multi-agent coordinator
             memory_service: Long-term memory service
             learning_service: Optional learning service for feedback loops
+            feedback_loop: Optional execution feedback loop for continuous learning
         """
         self.autonomous_orchestrator = autonomous_orchestrator
         self.coordinator = multi_agent_coordinator
         self.memory_service = memory_service
         self.learning_service = learning_service
+        self.feedback_loop = feedback_loop
 
         # Track active collaborative sessions
         self.active_sessions: Dict[str, Dict[str, Any]] = {}
@@ -222,6 +230,22 @@ class CollaborativeAgentOrchestrator:
 
             # Store collaboration pattern in memory
             await self._store_collaboration_pattern(goal, collaboration_data, result)
+
+            # Record execution feedback for continuous learning
+            if self.feedback_loop:
+                enriched_result = {
+                    **result,
+                    "execution_id": session_id,
+                    "agent_role": "orchestrator",
+                    "strategy": "collaborative",
+                    "successful_steps": [],  # Would extract from plan
+                    "failed_steps": [],  # Would extract from plan
+                    "errors": [],  # Would extract from result
+                }
+                await self.feedback_loop.record_execution(
+                    execution_result=enriched_result,
+                    collaboration_data=collaboration_data,
+                )
 
             result["collaboration"] = collaboration_data
 
