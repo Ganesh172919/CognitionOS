@@ -180,7 +180,11 @@ class WorkingMemory:
     def update_access(self) -> None:
         """Update access tracking when memory is accessed"""
         self.access_count += 1
-        self.last_accessed_at = datetime.utcnow()
+        now = datetime.utcnow()
+        # Ensure monotonic updates even on coarse/identical clock ticks.
+        if self.last_accessed_at and now <= self.last_accessed_at:
+            now = self.last_accessed_at + timedelta(microseconds=1)
+        self.last_accessed_at = now
 
     def update_importance_score(self, new_score: float) -> None:
         """

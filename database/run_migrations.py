@@ -17,12 +17,16 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Add parent directory to path
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://cognition:cognition@localhost:5432/cognitionos"
-)
+# Build DATABASE_URL from DATABASE_URL or DB_* env vars (sync postgresql:// driver)
+_uri = os.getenv("DATABASE_URL")
+if not _uri:
+    _host = os.getenv("DB_HOST", "localhost")
+    _port = os.getenv("DB_PORT", "5432")
+    _db = os.getenv("DB_DATABASE", "cognitionos")
+    _user = os.getenv("DB_USERNAME", "cognition")
+    _pw = os.getenv("DB_PASSWORD", "changeme")
+    _uri = f"postgresql://{_user}:{_pw}@{_host}:{_port}/{_db}"
+DATABASE_URL = _uri
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 

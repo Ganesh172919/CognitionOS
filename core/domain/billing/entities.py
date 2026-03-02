@@ -308,6 +308,7 @@ class UsageRecord:
     quantity: Decimal
     unit: str
     timestamp: datetime
+    event_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     @classmethod
@@ -317,6 +318,7 @@ class UsageRecord:
         resource_type: str,
         quantity: Decimal,
         unit: str = "count",
+        event_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "UsageRecord":
         """Create a new usage record."""
@@ -327,6 +329,7 @@ class UsageRecord:
             quantity=quantity,
             unit=unit,
             timestamp=datetime.utcnow(),
+            event_id=event_id,
             metadata=metadata or {},
         )
 

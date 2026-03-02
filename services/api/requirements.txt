@@ -26,6 +26,7 @@ aio-pika==9.3.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
+stripe==14.4.0
 
 # Observability - Core
 opentelemetry-api==1.21.0

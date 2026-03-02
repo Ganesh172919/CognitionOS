@@ -12,11 +12,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
 from core.config import get_config
 from infrastructure.observability import get_logger
@@ -95,10 +90,15 @@ def instrument_fastapi(app):
         return
     
     try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
         FastAPIInstrumentor.instrument_app(app)
         logger.info("FastAPI instrumentation enabled")
     except Exception as e:
-        logger.error("Failed to instrument FastAPI", extra={"error": str(e)})
+        logger.warning(
+            "FastAPI instrumentation unavailable; skipping",
+            extra={"error": str(e)},
+        )
 
 
 def instrument_sqlalchemy(engine):
@@ -112,10 +112,15 @@ def instrument_sqlalchemy(engine):
         return
     
     try:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
         SQLAlchemyInstrumentor().instrument(engine=engine)
         logger.info("SQLAlchemy instrumentation enabled")
     except Exception as e:
-        logger.error("Failed to instrument SQLAlchemy", extra={"error": str(e)})
+        logger.warning(
+            "SQLAlchemy instrumentation unavailable; skipping",
+            extra={"error": str(e)},
+        )
 
 
 def instrument_redis():
@@ -124,10 +129,15 @@ def instrument_redis():
         return
     
     try:
+        from opentelemetry.instrumentation.redis import RedisInstrumentor
+
         RedisInstrumentor().instrument()
         logger.info("Redis instrumentation enabled")
     except Exception as e:
-        logger.error("Failed to instrument Redis", extra={"error": str(e)})
+        logger.warning(
+            "Redis instrumentation unavailable; skipping",
+            extra={"error": str(e)},
+        )
 
 
 def instrument_http_clients():
@@ -136,11 +146,17 @@ def instrument_http_clients():
         return
     
     try:
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
         RequestsInstrumentor().instrument()
         HTTPXClientInstrumentor().instrument()
         logger.info("HTTP client instrumentation enabled")
     except Exception as e:
-        logger.error("Failed to instrument HTTP clients", extra={"error": str(e)})
+        logger.warning(
+            "HTTP client instrumentation unavailable; skipping",
+            extra={"error": str(e)},
+        )
 
 
 def get_tracer() -> trace.Tracer:

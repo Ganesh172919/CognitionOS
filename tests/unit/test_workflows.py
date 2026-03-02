@@ -80,7 +80,7 @@ class TestWorkflowEndpoints:
         """Test workflow execution with missing parameters"""
         response = await client.post(
             "/api/v3/workflows/execute",
-            json={"workflow_id": "test"}  # Missing version
+            json={}  # Missing workflow_id
         )
         
         assert response.status_code == 422

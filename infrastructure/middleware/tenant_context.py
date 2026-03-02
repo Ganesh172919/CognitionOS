@@ -60,79 +60,94 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process the request and inject tenant context."""
-        # Skip tenant resolution for excluded paths
-        if self._is_excluded_path(request.url.path):
-            return await call_next(request)
-        
-        tenant = None
-        tenant_identifier = None
-        identification_method = None
-        
+        tenant: Optional[Tenant] = None
+        tenant_identifier: Optional[str] = None
+        identification_method: Optional[str] = None
+
         try:
-            # Try multiple identification methods
-            tenant_identifier, identification_method = self._extract_tenant_identifier(request)
-            
-            if tenant_identifier:
-                # Resolve tenant from repository
-                if identification_method == "slug":
-                    tenant = await self.tenant_repository.get_by_slug(tenant_identifier)
-                elif identification_method == "id":
-                    tenant = await self.tenant_repository.get_by_id(UUID(tenant_identifier))
-                
+            if not self._is_excluded_path(request.url.path):
+                # If a previous middleware already established a tenant (e.g., API key auth),
+                # respect it to avoid false "TenantRequired" errors.
+                tenant = get_current_tenant()
+
+                if tenant is None:
+                    # Try multiple identification methods
+                    tenant_identifier, identification_method = self._extract_tenant_identifier(request)
+
+                    if tenant_identifier:
+                        # Resolve tenant from repository
+                        if identification_method == "slug":
+                            tenant = await self.tenant_repository.get_by_slug(tenant_identifier)
+                        elif identification_method == "id":
+                            tenant = await self.tenant_repository.get_by_id(UUID(tenant_identifier))
+
+                        if tenant:
+                            # Validate tenant is active
+                            if not tenant.is_active():
+                                return JSONResponse(
+                                    status_code=403,
+                                    content={
+                                        "error": "TenantSuspended",
+                                        "message": f"Tenant is {tenant.status.value}",
+                                        "reason": tenant.suspended_reason,
+                                    },
+                                )
+
+                            # Set tenant in context
+                            set_current_tenant(tenant)
+                            logger.info(
+                                f"Tenant context set: {tenant.slug} (method: {identification_method})",
+                                extra={"tenant_id": str(tenant.id), "tenant_slug": tenant.slug},
+                            )
+                        else:
+                            logger.warning(f"Tenant not found: {tenant_identifier}")
+
+                # Set tenant_id for structured logging when tenant is present
                 if tenant:
-                    # Validate tenant is active
-                    if not tenant.is_active():
-                        return JSONResponse(
-                            status_code=403,
-                            content={
-                                "error": "TenantSuspended",
-                                "message": f"Tenant is {tenant.status.value}",
-                                "reason": tenant.suspended_reason,
-                            }
-                        )
-                    
-                    # Set tenant in context
-                    set_current_tenant(tenant)
-                    logger.info(
-                        f"Tenant context set: {tenant.slug} (method: {identification_method})",
-                        extra={"tenant_id": str(tenant.id), "tenant_slug": tenant.slug}
+                    try:
+                        from infrastructure.observability.structured_logger import set_tenant_id
+                        set_tenant_id(str(tenant.id))
+                    except ImportError:
+                        pass
+
+                # Check if tenant is required but not found
+                if self.require_tenant and not tenant:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": "TenantRequired",
+                            "message": "Valid tenant identification is required",
+                            "hint": "Provide X-Tenant-Slug header or use subdomain",
+                        },
                     )
-                else:
-                    logger.warning(f"Tenant not found: {tenant_identifier}")
-            
-            # Check if tenant is required but not found
-            if self.require_tenant and not tenant:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": "TenantRequired",
-                        "message": "Valid tenant identification is required",
-                        "hint": "Provide X-Tenant-Slug header or use subdomain",
-                    }
-                )
-            
+
             # Process request
             response = await call_next(request)
-            
+
             # Add tenant identifier to response headers (for debugging)
             if tenant:
                 response.headers["X-Tenant-ID"] = str(tenant.id)
                 response.headers["X-Tenant-Slug"] = tenant.slug
-            
+
             return response
-            
+
         except Exception as e:
             logger.error(f"Error in tenant context middleware: {e}", exc_info=True)
             return JSONResponse(
                 status_code=500,
                 content={
                     "error": "TenantContextError",
-                    "message": "Failed to resolve tenant context"
-                }
+                    "message": "Failed to resolve tenant context",
+                },
             )
         finally:
-            # Clear tenant context after request
+            # Clear tenant context and structured log context
             set_current_tenant(None)
+            try:
+                from infrastructure.observability.structured_logger import clear_tenant_id
+                clear_tenant_id()
+            except ImportError:
+                pass
     
     def _extract_tenant_identifier(self, request: Request) -> tuple[Optional[str], Optional[str]]:
         """
@@ -166,6 +181,12 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         # (This would be set by auth middleware if user is authenticated)
         if hasattr(request.state, "user") and hasattr(request.state.user, "tenant_id"):
             return str(request.state.user.tenant_id), "id"
+
+        # Method 6: Check if tenant is attached to API key auth context
+        if hasattr(request.state, "api_key"):
+            api_key_obj = request.state.api_key
+            if isinstance(api_key_obj, dict) and api_key_obj.get("tenant_id"):
+                return str(api_key_obj["tenant_id"]), "id"
         
         return None, None
     

@@ -90,6 +90,7 @@ class UsageRecordModel(Base):
     quantity = Column(DECIMAL(20, 6), nullable=False)
     unit = Column(String(50), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, index=True)
+    event_id = Column(String(255), nullable=True, index=True)
     usage_metadata = Column("metadata", JSON, nullable=False, default={})
     
     def __repr__(self):

@@ -19,6 +19,72 @@ class PostgresAPIKeyRepository:
     
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def create(
+        self,
+        *,
+        tenant_id: UUID,
+        name: str,
+        key_hash: str,
+        key_prefix: str,
+        scopes: list[str],
+        rate_limit_per_minute: int = 60,
+        expires_at: Optional[datetime] = None,
+        created_by: Optional[UUID] = None,
+    ) -> APIKeyModel:
+        """Create and persist a new API key record (hash only)."""
+        api_key = APIKeyModel(
+            tenant_id=tenant_id,
+            name=name,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+            scopes=scopes,
+            rate_limit_per_minute=rate_limit_per_minute,
+            expires_at=expires_at,
+            created_by=created_by,
+            is_active=True,
+        )
+        self.session.add(api_key)
+        await self.session.flush()
+        await self.session.refresh(api_key)
+        return api_key
+
+    async def get_by_id(self, api_key_id: UUID) -> Optional[APIKeyModel]:
+        """Retrieve API key by ID (active or inactive)."""
+        stmt = select(APIKeyModel).where(APIKeyModel.id == api_key_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        include_inactive: bool = False,
+        limit: int = 100,
+    ) -> list[APIKeyModel]:
+        """List API keys for a tenant."""
+        stmt = select(APIKeyModel).where(APIKeyModel.tenant_id == tenant_id)
+        if not include_inactive:
+            stmt = stmt.where(APIKeyModel.is_active == True)
+        stmt = stmt.order_by(APIKeyModel.created_at.desc()).limit(limit)
+
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def revoke(self, api_key_id: UUID, *, tenant_id: Optional[UUID] = None) -> bool:
+        """Revoke (deactivate) an API key by ID."""
+        stmt = select(APIKeyModel).where(APIKeyModel.id == api_key_id)
+        if tenant_id is not None:
+            stmt = stmt.where(APIKeyModel.tenant_id == tenant_id)
+
+        result = await self.session.execute(stmt)
+        api_key = result.scalar_one_or_none()
+        if not api_key:
+            return False
+
+        api_key.is_active = False
+        await self.session.flush()
+        return True
     
     async def get_by_hash(self, key_hash: str) -> Optional[APIKeyModel]:
         """

@@ -1,13 +1,14 @@
 {
   "name": "cognitionos-frontend",
-  "version": "0.1.0",
-  "description": "CognitionOS Frontend - Agent visualization and monitoring",
+  "version": "2.0.0",
+  "description": "CognitionOS Frontend - AI-Powered Code Intelligence Platform",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "next": "14.0.4",

@@ -473,7 +473,7 @@ class IntelligentRecommendationEngine:
 
             # Allow current level and one above
             return diff_idx <= skill_idx + 1
-        except:
+        except (ValueError, IndexError):
             return True
 
     async def track_interaction(

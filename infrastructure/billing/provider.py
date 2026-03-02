@@ -268,6 +268,69 @@ class StripeBillingProvider(BillingProvider):
         except Exception as e:
             logger.error(f"Error creating Stripe subscription for customer {customer_id}: {e}")
             raise BillingProviderError(f"Failed to create subscription: {str(e)}")
+
+    async def create_checkout_session(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        success_url: str,
+        cancel_url: str,
+        trial_days: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a Stripe Checkout session for subscription purchase/upgrade.
+
+        Note: Webhook processing is the source of truth for subscription persistence.
+        """
+        try:
+            subscription_data: Dict[str, Any] = {"metadata": metadata or {}}
+            if trial_days is not None:
+                subscription_data["trial_period_days"] = int(trial_days)
+
+            session = await self._async_stripe_call(
+                self.stripe.checkout.Session.create,
+                customer=customer_id,
+                mode="subscription",
+                line_items=[{"price": price_id, "quantity": 1}],
+                success_url=success_url,
+                cancel_url=cancel_url,
+                allow_promotion_codes=True,
+                subscription_data=subscription_data,
+                metadata=metadata or {},
+            )
+
+            return {
+                "id": session.id,
+                "url": getattr(session, "url", None),
+                "provider": "stripe",
+            }
+        except Exception as e:
+            logger.error(f"Error creating Stripe checkout session for customer {customer_id}: {e}")
+            raise BillingProviderError(f"Failed to create checkout session: {str(e)}")
+
+    async def create_billing_portal_session(
+        self,
+        *,
+        customer_id: str,
+        return_url: str,
+    ) -> Dict[str, Any]:
+        """Create a Stripe Billing Portal session for customer self-service."""
+        try:
+            session = await self._async_stripe_call(
+                self.stripe.billing_portal.Session.create,
+                customer=customer_id,
+                return_url=return_url,
+            )
+            return {
+                "id": session.id,
+                "url": getattr(session, "url", None),
+                "provider": "stripe",
+            }
+        except Exception as e:
+            logger.error(f"Error creating Stripe billing portal session for customer {customer_id}: {e}")
+            raise BillingProviderError(f"Failed to create billing portal session: {str(e)}")
     
     async def update_subscription(
         self,
@@ -555,6 +618,32 @@ class MockBillingProvider(BillingProvider):
         
         logger.info(f"Mock: Created subscription {subscription_id} for customer {customer_id}")
         return subscription
+
+    async def create_checkout_session(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        success_url: str,
+        cancel_url: str,
+        trial_days: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Mock checkout session (returns the provided success_url)."""
+        _ = await self.create_subscription(customer_id=customer_id, price_id=price_id, trial_days=trial_days, metadata=metadata)
+        return {"id": self._generate_id("cs"), "url": success_url, "provider": "mock"}
+
+    async def create_billing_portal_session(
+        self,
+        *,
+        customer_id: str,
+        return_url: str,
+    ) -> Dict[str, Any]:
+        """Mock billing portal session (returns the provided return_url)."""
+        if customer_id not in self._customers:
+            # Keep behavior consistent with other methods.
+            raise BillingProviderError(f"Customer {customer_id} not found")
+        return {"id": self._generate_id("bps"), "url": return_url, "provider": "mock"}
     
     async def update_subscription(
         self,

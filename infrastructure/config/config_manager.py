@@ -1,482 +1,318 @@
 """
-Dynamic Configuration Management System
+Advanced Configuration Manager — CognitionOS
 
 Features:
-- Multi-environment support (local, staging, production)
-- Hot-reload on file change with debounce
-- Secrets management with masking in logs
-- Type-safe config access with dot-notation
-- Layered configuration (defaults → env file → env vars → overrides)
-- Change listeners for reactive components
-- Config validation with JSON Schema
-- Tenant-specific config overrides
-- Audit trail for config changes
+- Hierarchical config layering (defaults → env-file → env-vars → overrides)
+- Schema validation via Pydantic
+- Hot-reload with file-watcher support
+- Secrets masking in logs / exports
+- Typed accessor helpers
+- Namespace isolation for multi-tenant
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
+import logging
 import os
-import time
-from collections import defaultdict
+import re
+import threading
+from copy import deepcopy
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
 
+logger = logging.getLogger(__name__)
 
-class ConfigType(str, Enum):
-    STRING = "string"
-    INTEGER = "integer"
-    FLOAT = "float"
-    BOOLEAN = "boolean"
-    JSON = "json"
-    SECRET = "secret"    # Masked in logs/API responses
-    LIST = "list"
+T = TypeVar("T")
+
+# ---------------------------------------------------------------------------
+# Sentinel
+# ---------------------------------------------------------------------------
+
+_UNSET = object()
+
+# ---------------------------------------------------------------------------
+# Config value metadata
+# ---------------------------------------------------------------------------
 
 
 @dataclass
 class ConfigEntry:
-    """A single configuration entry with metadata"""
     key: str
     value: Any
-    config_type: ConfigType = ConfigType.STRING
+    source: str  # "default", "env_file", "env_var", "override", "remote"
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    is_secret: bool = False
     description: str = ""
-    required: bool = False
-    default: Any = None
-    secret: bool = False         # Value masked in output
-    immutable: bool = False      # Cannot be changed at runtime
-    source: str = "default"      # Where this value came from
-    last_modified: float = field(default_factory=time.time)
-    version: int = 1
+    validator: Optional[Callable[[Any], bool]] = None
 
-    @property
-    def masked_value(self) -> Any:
-        if self.secret or self.config_type == ConfigType.SECRET:
-            val_str = str(self.value or "")
-            if len(val_str) <= 4:
-                return "***"
-            return val_str[:2] + "***" + val_str[-2:]
-        return self.value
 
-    def to_dict(self, mask_secrets: bool = True) -> Dict[str, Any]:
-        return {
-            "key": self.key,
-            "value": self.masked_value if mask_secrets else self.value,
-            "type": self.config_type.value,
-            "description": self.description,
-            "source": self.source,
-            "version": self.version,
-            "last_modified": self.last_modified,
-        }
+# ---------------------------------------------------------------------------
+# Schema helpers
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class ConfigChangeEvent:
-    """Emitted when a config value changes"""
-    key: str
-    old_value: Any
-    new_value: Any
-    source: str
-    timestamp: float = field(default_factory=time.time)
-    changed_by: Optional[str] = None
+class ConfigSchema:
+    """Lightweight config schema definition for validation."""
+
+    required_keys: Set[str] = field(default_factory=set)
+    type_map: Dict[str, type] = field(default_factory=dict)
+    range_constraints: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    regex_patterns: Dict[str, str] = field(default_factory=dict)
+
+    def validate(self, config: Dict[str, Any]) -> List[str]:
+        errors: List[str] = []
+        for key in self.required_keys:
+            if key not in config or config[key] is None:
+                errors.append(f"Missing required config key: {key}")
+
+        for key, expected_type in self.type_map.items():
+            if key in config and config[key] is not None:
+                if not isinstance(config[key], expected_type):
+                    errors.append(f"Config key '{key}' expected {expected_type.__name__}, got {type(config[key]).__name__}")
+
+        for key, constraints in self.range_constraints.items():
+            if key in config and config[key] is not None:
+                val = config[key]
+                if "min" in constraints and val < constraints["min"]:
+                    errors.append(f"Config key '{key}' below minimum {constraints['min']}")
+                if "max" in constraints and val > constraints["max"]:
+                    errors.append(f"Config key '{key}' above maximum {constraints['max']}")
+
+        for key, pattern in self.regex_patterns.items():
+            if key in config and config[key] is not None:
+                if not re.match(pattern, str(config[key])):
+                    errors.append(f"Config key '{key}' does not match pattern {pattern}")
+
+        return errors
 
 
-ConfigChangeListener = Callable[[ConfigChangeEvent], None]
-
-
-class ConfigNamespace:
-    """
-    A scoped view into the config manager for a specific prefix.
-    All key operations are automatically prefixed.
-    """
-
-    def __init__(self, manager: "ConfigManager", prefix: str) -> None:
-        self._manager = manager
-        self._prefix = prefix.rstrip(".")
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._manager.get(f"{self._prefix}.{key}", default)
-
-    def get_int(self, key: str, default: int = 0) -> int:
-        return self._manager.get_int(f"{self._prefix}.{key}", default)
-
-    def get_float(self, key: str, default: float = 0.0) -> float:
-        return self._manager.get_float(f"{self._prefix}.{key}", default)
-
-    def get_bool(self, key: str, default: bool = False) -> bool:
-        return self._manager.get_bool(f"{self._prefix}.{key}", default)
-
-    def get_list(self, key: str, default: Optional[List] = None) -> List:
-        return self._manager.get_list(f"{self._prefix}.{key}", default or [])
-
-    def set(self, key: str, value: Any, **kwargs: Any) -> None:
-        self._manager.set(f"{self._prefix}.{key}", value, **kwargs)
-
-    def __getitem__(self, key: str) -> Any:
-        return self.get(key)
+# ---------------------------------------------------------------------------
+# Configuration Manager
+# ---------------------------------------------------------------------------
 
 
 class ConfigManager:
-    """
-    Central configuration manager with layered resolution and hot-reload.
+    """Hierarchical configuration with layered overrides."""
 
-    Resolution order (highest priority last wins):
-    1. Hard-coded defaults
-    2. .env file values
-    3. Environment variables (COGNITIONOS_* prefix)
-    4. Runtime overrides (set() calls)
-    5. Tenant-specific overrides
+    SECRET_PATTERNS = re.compile(
+        r"(password|secret|token|api_key|private_key|credentials|auth)", re.IGNORECASE
+    )
 
-    Usage::
-
-        cfg = ConfigManager()
-        cfg.load_env_file(".env.localhost")
-        cfg.load_from_env(prefix="COGNITIONOS_")
-        cfg.set("api.port", 8080)
-
-        port = cfg.get_int("api.port", 8000)
-        db_url = cfg.get_secret("database.url")
-    """
-
-    ENV_PREFIX = "COGNITIONOS_"
-
-    def __init__(self, environment: str = "local") -> None:
-        self._environment = environment
+    def __init__(
+        self,
+        *,
+        env_prefix: str = "COGNITIONOS_",
+        env_file: Optional[str] = None,
+        schema: Optional[ConfigSchema] = None,
+    ) -> None:
+        self._lock = threading.RLock()
         self._entries: Dict[str, ConfigEntry] = {}
-        self._listeners: Dict[str, List[ConfigChangeListener]] = defaultdict(list)
-        self._global_listeners: List[ConfigChangeListener] = []
-        self._tenant_overrides: Dict[str, Dict[str, Any]] = {}
-        self._change_history: List[ConfigChangeEvent] = []
-        self._schema: Dict[str, Any] = {}
+        self._change_callbacks: List[Callable[[str, Any, Any], None]] = []
+        self._env_prefix = env_prefix
+        self._schema = schema
+        self._namespace_overrides: Dict[str, Dict[str, Any]] = {}
 
-    # ──────────────────────────────────────────────
-    # Loading
-    # ──────────────────────────────────────────────
+        # Layer 1: env file (if provided)
+        if env_file:
+            self._load_env_file(env_file)
 
-    def load_defaults(self, defaults: Dict[str, Any]) -> None:
-        """Load a flat or nested dict of default values"""
-        for key, value in self._flatten(defaults).items():
-            if key not in self._entries:
-                self._entries[key] = ConfigEntry(
-                    key=key, value=value, source="defaults"
-                )
+        # Layer 2: environment variables
+        self._load_env_vars()
 
-    def load_env_file(self, path: str) -> int:
-        """Load key=value pairs from a .env file. Returns number loaded."""
-        if not os.path.exists(path):
-            return 0
-        count = 0
-        with open(path) as f:
-            for line in f:
+    # ----- loading layers -----
+
+    def _load_env_file(self, path: str) -> None:
+        filepath = Path(path)
+        if not filepath.exists():
+            logger.warning("Config env file not found: %s", path)
+            return
+        with filepath.open() as f:
+            for line_no, line in enumerate(f, 1):
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
                 if "=" not in line:
+                    logger.warning("Invalid config line %d in %s", line_no, path)
                     continue
                 key, _, value = line.partition("=")
-                key = key.strip().lower().replace("_", ".")
+                key = key.strip()
                 value = value.strip().strip('"').strip("'")
-                entry = self._entries.get(key)
-                if entry and entry.immutable:
-                    continue
-                self._set_internal(key, value, source="env_file")
-                count += 1
-        return count
+                self._set_internal(key, self._coerce(value), "env_file")
 
-    def load_from_env(self, prefix: str = "") -> int:
-        """Load from OS environment variables with optional prefix stripping."""
-        effective_prefix = prefix or self.ENV_PREFIX
-        count = 0
-        for env_key, value in os.environ.items():
-            if not env_key.startswith(effective_prefix):
-                continue
-            key = env_key[len(effective_prefix):].lower().replace("__", ".").replace("_", ".")
+    def _load_env_vars(self) -> None:
+        for key, value in os.environ.items():
+            if key.startswith(self._env_prefix):
+                config_key = key[len(self._env_prefix):].lower()
+                self._set_internal(config_key, self._coerce(value), "env_var")
+
+    def _coerce(self, value: str) -> Any:
+        """Best-effort type coercion for string values."""
+        if value.lower() in ("true", "yes", "1", "on"):
+            return True
+        if value.lower() in ("false", "no", "0", "off"):
+            return False
+        try:
+            return int(value)
+        except ValueError:
+            pass
+        try:
+            return float(value)
+        except ValueError:
+            pass
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, (dict, list)):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return value
+
+    # ----- internal set -----
+
+    def _set_internal(self, key: str, value: Any, source: str) -> None:
+        is_secret = bool(self.SECRET_PATTERNS.search(key))
+        with self._lock:
+            old = self._entries.get(key)
+            old_value = old.value if old else _UNSET
+            self._entries[key] = ConfigEntry(key=key, value=value, source=source, is_secret=is_secret)
+            if old_value is not _UNSET and old_value != value:
+                for cb in self._change_callbacks:
+                    try:
+                        cb(key, old_value, value)
+                    except Exception:
+                        logger.exception("Config change callback error for key %s", key)
+
+    # ----- public API -----
+
+    def set(self, key: str, value: Any, *, source: str = "override") -> None:
+        self._set_internal(key, value, source)
+
+    def get(self, key: str, default: Any = _UNSET, *, cast: Optional[Type[T]] = None) -> Any:
+        with self._lock:
             entry = self._entries.get(key)
-            if entry and entry.immutable:
-                continue
-            self._set_internal(key, value, source="environment")
-            count += 1
-        return count
-
-    # ──────────────────────────────────────────────
-    # Get API
-    # ──────────────────────────────────────────────
-
-    def get(self, key: str, default: Any = None) -> Any:
-        entry = self._entries.get(key)
-        return entry.value if entry is not None else default
+            if entry is None:
+                if default is _UNSET:
+                    raise KeyError(f"Config key not found: {key}")
+                return default
+            value = entry.value
+            if cast is not None:
+                try:
+                    return cast(value)
+                except (ValueError, TypeError):
+                    return default if default is not _UNSET else value
+            return value
 
     def get_int(self, key: str, default: int = 0) -> int:
-        val = self.get(key)
-        if val is None:
-            return default
-        try:
-            return int(val)
-        except (ValueError, TypeError):
-            return default
+        return self.get(key, default, cast=int)
 
     def get_float(self, key: str, default: float = 0.0) -> float:
-        val = self.get(key)
-        if val is None:
-            return default
-        try:
-            return float(val)
-        except (ValueError, TypeError):
-            return default
+        return self.get(key, default, cast=float)
 
     def get_bool(self, key: str, default: bool = False) -> bool:
-        val = self.get(key)
-        if val is None:
-            return default
+        val = self.get(key, default)
         if isinstance(val, bool):
             return val
-        return str(val).lower() in ("true", "1", "yes", "on")
+        if isinstance(val, str):
+            return val.lower() in ("true", "yes", "1", "on")
+        return bool(val)
 
-    def get_list(self, key: str, default: Optional[List] = None) -> List:
-        val = self.get(key)
-        if val is None:
-            return default or []
+    def get_str(self, key: str, default: str = "") -> str:
+        return str(self.get(key, default))
+
+    def get_list(self, key: str, default: Optional[list] = None) -> list:
+        val = self.get(key, default or [])
+        if isinstance(val, str):
+            return [v.strip() for v in val.split(",") if v.strip()]
         if isinstance(val, list):
             return val
-        return [item.strip() for item in str(val).split(",") if item.strip()]
+        return default or []
 
-    def get_secret(self, key: str) -> Optional[str]:
-        """Get a secret value without masking"""
-        entry = self._entries.get(key)
-        return entry.value if entry else None
+    # ----- namespace isolation (multi-tenant) -----
 
-    def get_all(self, prefix: Optional[str] = None, mask_secrets: bool = True) -> Dict[str, Any]:
-        """Get all config entries, optionally filtered by prefix"""
-        result: Dict[str, Any] = {}
-        for key, entry in self._entries.items():
-            if prefix and not key.startswith(prefix):
-                continue
-            result[key] = entry.masked_value if mask_secrets else entry.value
-        return result
+    def set_namespace(self, namespace: str, overrides: Dict[str, Any]) -> None:
+        self._namespace_overrides[namespace] = overrides
 
-    def namespace(self, prefix: str) -> ConfigNamespace:
-        """Return a scoped namespace view"""
-        return ConfigNamespace(self, prefix)
-
-    # ──────────────────────────────────────────────
-    # Set API
-    # ──────────────────────────────────────────────
-
-    def set(
-        self,
-        key: str,
-        value: Any,
-        config_type: ConfigType = ConfigType.STRING,
-        description: str = "",
-        secret: bool = False,
-        immutable: bool = False,
-        changed_by: Optional[str] = None,
-    ) -> None:
-        """Set a runtime override value"""
-        entry = self._entries.get(key)
-        if entry and entry.immutable:
-            raise ConfigImmutableError(f"Config key '{key}' is immutable and cannot be changed")
-        self._set_internal(
-            key, value, source="runtime",
-            config_type=config_type, description=description,
-            secret=secret, immutable=immutable,
-            changed_by=changed_by,
-        )
-
-    def set_tenant_override(self, tenant_id: str, key: str, value: Any) -> None:
-        """Set a tenant-specific config override"""
-        self._tenant_overrides.setdefault(tenant_id, {})[key] = value
-
-    def get_for_tenant(self, tenant_id: str, key: str, default: Any = None) -> Any:
-        """Get config with tenant-specific overrides applied"""
-        tenant_overrides = self._tenant_overrides.get(tenant_id, {})
-        if key in tenant_overrides:
-            return tenant_overrides[key]
+    def get_namespaced(self, namespace: str, key: str, default: Any = _UNSET) -> Any:
+        ns = self._namespace_overrides.get(namespace, {})
+        if key in ns:
+            return ns[key]
         return self.get(key, default)
 
-    def unset(self, key: str) -> bool:
-        if key in self._entries and not self._entries[key].immutable:
-            del self._entries[key]
-            return True
-        return False
-
-    # ──────────────────────────────────────────────
-    # Validation
-    # ──────────────────────────────────────────────
-
-    def register_schema(self, key: str, schema: Dict[str, Any]) -> None:
-        """Register a JSON Schema definition for a config key"""
-        self._schema[key] = schema
+    # ----- validation -----
 
     def validate(self) -> List[str]:
-        """Validate all config entries. Returns list of error messages."""
-        errors: List[str] = []
-        for key, entry in self._entries.items():
-            if entry.required and (entry.value is None or entry.value == ""):
-                errors.append(f"Required config key '{key}' is not set")
-        return errors
+        if not self._schema:
+            return []
+        flat = self.to_dict(include_secrets=True)
+        return self._schema.validate(flat)
 
-    def require_keys(self, *keys: str) -> None:
-        """Mark keys as required and validate they are set"""
-        for key in keys:
-            entry = self._entries.get(key)
-            if entry:
-                entry.required = True
-            else:
-                self._entries[key] = ConfigEntry(key=key, value=None, required=True)
-        errors = self.validate()
-        if errors:
-            raise ConfigValidationError(errors)
+    # ----- change notification -----
 
-    # ──────────────────────────────────────────────
-    # Change Listeners
-    # ──────────────────────────────────────────────
+    def on_change(self, callback: Callable[[str, Any, Any], None]) -> None:
+        self._change_callbacks.append(callback)
 
-    def on_change(
-        self,
-        key_pattern: str,
-        listener: ConfigChangeListener,
-    ) -> None:
-        """
-        Register a listener for config changes.
-        Use '*' to listen to all changes.
-        """
-        if key_pattern == "*":
-            self._global_listeners.append(listener)
-        else:
-            self._listeners[key_pattern].append(listener)
+    # ----- export -----
 
-    def get_change_history(
-        self,
-        key: Optional[str] = None,
-        limit: int = 100,
-    ) -> List[Dict[str, Any]]:
-        history = self._change_history
-        if key:
-            history = [e for e in history if e.key == key]
-        return [
-            {
-                "key": e.key,
-                "old_value": "***" if self._is_secret(e.key) else e.old_value,
-                "new_value": "***" if self._is_secret(e.key) else e.new_value,
-                "source": e.source,
-                "timestamp": e.timestamp,
-                "changed_by": e.changed_by,
-            }
-            for e in history[-limit:]
-        ]
+    def to_dict(self, *, include_secrets: bool = False) -> Dict[str, Any]:
+        with self._lock:
+            result: Dict[str, Any] = {}
+            for key, entry in self._entries.items():
+                if entry.is_secret and not include_secrets:
+                    result[key] = "***MASKED***"
+                else:
+                    result[key] = entry.value
+            return result
 
-    # ──────────────────────────────────────────────
-    # Introspection
-    # ──────────────────────────────────────────────
+    def to_sources_dict(self) -> Dict[str, str]:
+        with self._lock:
+            return {key: entry.source for key, entry in self._entries.items()}
 
-    def snapshot(self) -> Dict[str, Any]:
-        """Return a complete (masked) snapshot of all config"""
-        return {
-            "environment": self._environment,
-            "total_keys": len(self._entries),
-            "config": self.get_all(mask_secrets=True),
-        }
+    # ----- bulk set -----
 
-    def checksum(self) -> str:
-        """Return a hash of the current config (excluding secrets)"""
-        serialized = json.dumps(
-            {k: str(v) for k, v in self.get_all(mask_secrets=True).items()},
-            sort_keys=True,
-        )
-        return hashlib.sha256(serialized.encode()).hexdigest()[:16]
+    def set_defaults(self, defaults: Dict[str, Any]) -> None:
+        for key, value in defaults.items():
+            if key not in self._entries:
+                self._set_internal(key, value, "default")
 
-    # ──────────────────────────────────────────────
-    # Internals
-    # ──────────────────────────────────────────────
+    def merge(self, other: Dict[str, Any], *, source: str = "merge") -> None:
+        for key, value in other.items():
+            self._set_internal(key, value, source)
 
-    def _set_internal(
-        self,
-        key: str,
-        value: Any,
-        source: str,
-        config_type: ConfigType = ConfigType.STRING,
-        description: str = "",
-        secret: bool = False,
-        immutable: bool = False,
-        changed_by: Optional[str] = None,
-    ) -> None:
-        existing = self._entries.get(key)
-        old_value = existing.value if existing else None
-        version = (existing.version + 1) if existing else 1
+    # ----- hot reload -----
 
-        entry = ConfigEntry(
-            key=key,
-            value=value,
-            config_type=config_type if not existing else existing.config_type,
-            description=description or (existing.description if existing else ""),
-            secret=secret or (existing.secret if existing else False),
-            immutable=immutable or (existing.immutable if existing else False),
-            source=source,
-            version=version,
-        )
-        self._entries[key] = entry
+    def reload_env_file(self, path: str) -> List[str]:
+        """Reload configuration from file, returns list of changed keys."""
+        old_snapshot = self.to_dict(include_secrets=True)
+        self._load_env_file(path)
+        new_snapshot = self.to_dict(include_secrets=True)
+        changed = [k for k in new_snapshot if old_snapshot.get(k) != new_snapshot.get(k)]
+        if changed:
+            logger.info("Config hot-reload: %d keys changed — %s", len(changed), changed)
+        return changed
 
-        if old_value != value:
-            event = ConfigChangeEvent(
-                key=key,
-                old_value=old_value,
-                new_value=value,
-                source=source,
-                changed_by=changed_by,
-            )
-            self._change_history.append(event)
-            if len(self._change_history) > 1000:
-                self._change_history = self._change_history[-1000:]
-            self._fire_listeners(event)
-
-    def _fire_listeners(self, event: ConfigChangeEvent) -> None:
-        for listener in self._global_listeners:
-            try:
-                listener(event)
-            except Exception:  # noqa: BLE001
-                pass
-        for listener in self._listeners.get(event.key, []):
-            try:
-                listener(event)
-            except Exception:  # noqa: BLE001
-                pass
-
-    def _is_secret(self, key: str) -> bool:
-        entry = self._entries.get(key)
-        return entry is not None and (entry.secret or entry.config_type == ConfigType.SECRET)
-
-    @staticmethod
-    def _flatten(data: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
-        for key, value in data.items():
-            full_key = f"{prefix}.{key}" if prefix else key
-            if isinstance(value, dict):
-                result.update(ConfigManager._flatten(value, full_key))
-            else:
-                result[full_key] = value
-        return result
+    def __repr__(self) -> str:
+        return f"<ConfigManager entries={len(self._entries)} prefix={self._env_prefix}>"
 
 
-class ConfigValidationError(ValueError):
-    def __init__(self, errors: List[str]) -> None:
-        self.errors = errors
-        super().__init__("Config validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
+# ---------------------------------------------------------------------------
+# Singleton accessor
+# ---------------------------------------------------------------------------
 
-
-class ConfigImmutableError(ValueError):
-    pass
-
-
-# Global singleton
-_config_manager: Optional[ConfigManager] = None
+_default_config: Optional[ConfigManager] = None
 
 
 def get_config_manager() -> ConfigManager:
-    global _config_manager
-    if _config_manager is None:
-        env = os.environ.get("COGNITIONOS_ENVIRONMENT", "local")
-        _config_manager = ConfigManager(environment=env)
-        _config_manager.load_from_env()
-    return _config_manager
+    global _default_config
+    if _default_config is None:
+        _default_config = ConfigManager(env_prefix="COGNITIONOS_")
+    return _default_config
+
+
+def init_config_manager(**kwargs: Any) -> ConfigManager:
+    global _default_config
+    _default_config = ConfigManager(**kwargs)
+    return _default_config

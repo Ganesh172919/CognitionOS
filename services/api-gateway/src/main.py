@@ -316,8 +316,8 @@ async def websocket_endpoint(websocket: WebSocket):
         log.error("WebSocket error", extra={"error": str(e)})
         try:
             await websocket.close(code=1011)
-        except:
-            pass
+        except Exception as close_err:
+            log.debug("WebSocket close failed: %s", close_err)
 
 
 @app.get("/health")

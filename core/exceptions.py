@@ -190,6 +190,12 @@ class BillingError(CognitionOSException):
     pass
 
 
+class BillingException(BillingError):
+    """Backward-compatible alias for billing errors."""
+
+    pass
+
+
 class PaymentRequiredError(BillingError):
     """Payment required to continue"""
     pass

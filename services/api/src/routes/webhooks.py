@@ -5,20 +5,20 @@ FastAPI endpoints for receiving and processing Stripe webhooks.
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Any
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Header
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from infrastructure.billing.webhook_handler import (
     StripeWebhookHandler,
     WebhookValidationError,
 )
 from infrastructure.persistence.webhook_event_repository import WebhookEventRepository
-from services.api.src.dependencies.injection import (
-    get_database_session,
-    get_billing_service,
-)
+from infrastructure.billing.orchestrator import BillingOrchestrator
+from services.api.src.dependencies.injection import get_db_session
 from core.exceptions import BillingException
 
 logger = logging.getLogger(__name__)
@@ -27,17 +27,23 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 async def get_webhook_handler(
-    session = Depends(get_database_session),
-    billing_service = Depends(get_billing_service),
+    session: AsyncSession = Depends(get_db_session),
 ) -> StripeWebhookHandler:
     """Dependency to get webhook handler instance."""
-    from core.config import get_settings
-    settings = get_settings()
+    from core.config import get_config
+    cfg = get_config()
+
+    if not cfg.billing.stripe.webhook_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="Stripe webhook secret not configured (set STRIPE_WEBHOOK_SECRET).",
+        )
     
     event_repository = WebhookEventRepository(session)
+    billing_service = BillingOrchestrator(session)
     
     return StripeWebhookHandler(
-        webhook_secret=settings.STRIPE_WEBHOOK_SECRET,
+        webhook_secret=cfg.billing.stripe.webhook_secret,
         billing_service=billing_service,
         event_repository=event_repository,
     )

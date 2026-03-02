@@ -338,7 +338,7 @@ class ContextManager:
             try:
                 pkg = json.loads(files['package.json'])
                 dependencies.extend(pkg.get('dependencies', {}).keys())
-            except:
+            except Exception:
                 pass
 
         return dependencies

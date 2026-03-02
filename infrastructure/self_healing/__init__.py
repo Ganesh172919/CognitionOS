@@ -8,6 +8,7 @@ from .healing_engine import (
     ProbeType,
     ActionType,
     HealingPolicy,
+    IncidentState,
     IncidentRecord,
     SystemHealthReport,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "ProbeType",
     "ActionType",
     "HealingPolicy",
+    "IncidentState",
     "IncidentRecord",
     "SystemHealthReport",
 ]

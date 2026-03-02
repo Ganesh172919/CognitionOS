@@ -4,19 +4,26 @@ Tool Runner Service.
 Provides sandboxed execution environment for agent tools.
 """
 
+import asyncio
+import base64
+import html
 import os
-
-# Add shared libs to path
+import re
+import sys
+import tempfile
+from pathlib import Path
+from urllib.parse import urlparse
 
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 from uuid import UUID, uuid4
-from enum import Enum
 import subprocess
 import json
 
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
+
+import httpx
 
 from shared.libs.config import ToolRunnerConfig, load_config
 from shared.libs.logger import setup_logger, get_contextual_logger
@@ -133,8 +140,55 @@ class SandboxExecutor:
 
     def __init__(self):
         self.logger = get_contextual_logger(__name__, component="SandboxExecutor")
-        self.use_docker = config.sandbox_enabled
+        self.use_docker = config.sandbox_enabled and config.execution_mode.lower() == "docker"
         self.audit_client = AuditClient()
+        self._semaphore = asyncio.Semaphore(max(1, int(config.max_concurrent_executions)))
+
+        allowed_roots_env = os.getenv("SANDBOX_ALLOWED_ROOTS", "").strip()
+        roots = [r.strip() for r in allowed_roots_env.split(",") if r.strip()] if allowed_roots_env else []
+        if not roots:
+            roots = ["/tmp/cognitionos_sandbox"]
+        self._sandbox_root = Path(roots[0]).resolve()
+        self._sandbox_root.mkdir(parents=True, exist_ok=True)
+
+        self._max_file_bytes = int(os.getenv("SANDBOX_MAX_FILE_BYTES", "1048576"))  # 1 MiB default
+
+        allowlist_env = os.getenv("SANDBOX_NETWORK_ALLOWLIST", "").strip()
+        self._network_allowlist = [h.strip().lower() for h in allowlist_env.split(",") if h.strip()]
+
+    def _resolve_path(self, rel_path: str) -> Path:
+        if not isinstance(rel_path, str) or not rel_path.strip():
+            raise ValueError("path is required")
+        if os.path.isabs(rel_path):
+            raise ValueError("absolute paths are not allowed")
+
+        candidate = (self._sandbox_root / rel_path).resolve()
+        try:
+            if not candidate.is_relative_to(self._sandbox_root):
+                raise ValueError("path escapes sandbox root")
+        except AttributeError:
+            root = str(self._sandbox_root)
+            if not str(candidate).startswith(root.rstrip(os.sep) + os.sep):
+                raise ValueError("path escapes sandbox root")
+
+        return candidate
+
+    def _validate_network_target(self, url: str) -> None:
+        if not config.sandbox_network_enabled:
+            raise PermissionError("Sandbox network is disabled")
+
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            raise PermissionError("Only http/https URLs are allowed")
+        if not parsed.hostname:
+            raise ValueError("Invalid URL: missing hostname")
+
+        if self._network_allowlist:
+            host = parsed.hostname.lower()
+            if host not in self._network_allowlist and not any(
+                host.endswith("." + allowed) for allowed in self._network_allowlist
+            ):
+                raise PermissionError("Target hostname not in allowlist")
 
     async def execute(
         self,
@@ -171,6 +225,7 @@ class SandboxExecutor:
             }
         )
 
+        await self._semaphore.acquire()
         try:
             # Check permissions
             tool_def = TOOLS.get(tool_name)
@@ -273,6 +328,11 @@ class SandboxExecutor:
                 error=str(e),
                 duration_seconds=duration
             )
+        finally:
+            try:
+                self._semaphore.release()
+            except Exception:
+                pass
 
     async def _execute_python(
         self,
@@ -281,20 +341,75 @@ class SandboxExecutor:
     ) -> Dict[str, Any]:
         """Execute Python code."""
         code = parameters.get("code", "")
+        if not isinstance(code, str):
+            return {"error": "Invalid parameter: code must be a string"}
 
-        if self.use_docker:
-            # In production, run in Docker container
-            # docker run --rm --network=none --memory=512m python:3.11-slim python -c "code"
-            return {
-                "output": "[Docker execution not implemented in demo]",
-                "stdout": "Simulated Python execution"
-            }
-        else:
-            # For demo, simulate execution
-            return {
-                "output": f"Executed Python code:\n{code[:100]}...",
-                "stdout": "Code executed successfully"
-            }
+        with tempfile.TemporaryDirectory(prefix="cogpy_") as tmpdir:
+            tmp_path = Path(tmpdir)
+            script_path = tmp_path / "main.py"
+            script_path.write_text(code, encoding="utf-8")
+
+            if self.use_docker:
+                cmd: List[str] = [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--pids-limit",
+                    "256",
+                    "--memory",
+                    config.sandbox_memory_limit,
+                    "--cpus",
+                    str(config.sandbox_cpu_limit),
+                    "--security-opt",
+                    "no-new-privileges",
+                    "--cap-drop",
+                    "ALL",
+                    "-e",
+                    "PYTHONDONTWRITEBYTECODE=1",
+                ]
+                if not config.sandbox_network_enabled:
+                    cmd.extend(["--network", "none"])
+
+                cmd.extend(
+                    [
+                        "-v",
+                        f"{script_path.parent}:/work:ro",
+                        "-w",
+                        "/work",
+                        config.docker_base_image,
+                        "python",
+                        "-I",
+                        "-u",
+                        "main.py",
+                    ]
+                )
+            else:
+                cmd = [sys.executable, "-I", "-u", str(script_path)]
+
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    cwd=str(tmp_path),
+                )
+            except subprocess.TimeoutExpired:
+                return {"error": f"Python execution timed out after {timeout}s"}
+            except FileNotFoundError as exc:
+                return {"error": f"Execution backend not available: {exc}"}
+
+            stdout = (proc.stdout or "")[:200_000]
+            stderr = (proc.stderr or "")[:200_000]
+            if proc.returncode != 0:
+                return {
+                    "error": f"Python exited with code {proc.returncode}",
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "output": {"exit_code": proc.returncode},
+                }
+
+            return {"output": {"exit_code": 0}, "stdout": stdout, "stderr": stderr}
 
     async def _execute_http(
         self,
@@ -303,13 +418,39 @@ class SandboxExecutor:
     ) -> Dict[str, Any]:
         """Make HTTP request."""
         url = parameters.get("url")
-        method = parameters.get("method", "GET")
+        method = (parameters.get("method") or "GET").upper()
+        headers = parameters.get("headers") or {}
+        body = parameters.get("body")
 
-        # In production, use httpx with proper timeout and error handling
+        if not isinstance(url, str) or not url:
+            return {"error": "Invalid parameter: url is required"}
+
+        self._validate_network_target(url)
+
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}:
+            return {"error": f"Unsupported method: {method}"}
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout), follow_redirects=False) as client:
+                resp = await client.request(
+                    method,
+                    url,
+                    headers=headers if isinstance(headers, dict) else None,
+                    json=body if isinstance(body, (dict, list)) else None,
+                    content=body if isinstance(body, (str, bytes)) else None,
+                )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"HTTP request failed: {exc}"}
+
+        text_body = resp.text
+        if len(text_body) > 50_000:
+            text_body = text_body[:50_000] + "\n...[truncated]..."
+
         return {
             "output": {
-                "status_code": 200,
-                "body": f"[Simulated {method} request to {url}]"
+                "status_code": resp.status_code,
+                "headers": dict(resp.headers),
+                "body": text_body,
             }
         }
 
@@ -319,15 +460,27 @@ class SandboxExecutor:
         timeout: int
     ) -> Dict[str, Any]:
         """Read file contents."""
-        path = parameters.get("path")
+        rel_path = parameters.get("path")
+        try:
+            target = self._resolve_path(rel_path)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
 
-        # Validate path (prevent directory traversal)
-        if ".." in path or path.startswith("/"):
-            return {"error": "Invalid file path"}
+        if not target.exists():
+            return {"error": "File not found"}
+        if target.is_dir():
+            return {"error": "Path is a directory"}
 
-        return {
-            "output": f"[Simulated file read from {path}]"
-        }
+        data = target.read_bytes()
+        if len(data) > self._max_file_bytes:
+            return {"error": f"File too large (>{self._max_file_bytes} bytes)"}
+
+        try:
+            text = data.decode("utf-8")
+            return {"output": {"path": str(rel_path), "encoding": "utf-8", "content": text, "size_bytes": len(data)}}
+        except UnicodeDecodeError:
+            b64 = base64.b64encode(data).decode("ascii")
+            return {"output": {"path": str(rel_path), "encoding": "base64", "content": b64, "size_bytes": len(data)}}
 
     async def _execute_write_file(
         self,
@@ -335,16 +488,24 @@ class SandboxExecutor:
         timeout: int
     ) -> Dict[str, Any]:
         """Write file contents."""
-        path = parameters.get("path")
+        rel_path = parameters.get("path")
         content = parameters.get("content")
 
-        # Validate path
-        if ".." in path or path.startswith("/"):
-            return {"error": "Invalid file path"}
+        if not isinstance(content, str):
+            return {"error": "Invalid parameter: content must be a string"}
 
-        return {
-            "output": f"[Simulated file write to {path}]"
-        }
+        try:
+            target = self._resolve_path(rel_path)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = content.encode("utf-8")
+        if len(data) > self._max_file_bytes:
+            return {"error": f"Content too large (>{self._max_file_bytes} bytes)"}
+
+        target.write_text(content, encoding="utf-8")
+        return {"output": {"path": str(rel_path), "bytes_written": len(data)}}
 
     async def _execute_web_search(
         self,
@@ -353,15 +514,35 @@ class SandboxExecutor:
     ) -> Dict[str, Any]:
         """Search the web."""
         query = parameters.get("query")
-        num_results = parameters.get("num_results", 5)
+        num_results = int(parameters.get("num_results", 5))
+        if not isinstance(query, str) or not query.strip():
+            return {"error": "Invalid parameter: query is required"}
 
-        # In production, integrate with search API (Google, Bing, etc.)
-        return {
-            "output": [
-                {"title": f"Result {i}", "url": f"https://example.com/{i}"}
-                for i in range(num_results)
-            ]
-        }
+        if not config.sandbox_network_enabled:
+            return {"error": "Sandbox network is disabled"}
+
+        url = f"https://duckduckgo.com/html/?{httpx.QueryParams({'q': query})}"
+        self._validate_network_target(url)
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout), follow_redirects=False) as client:
+                resp = await client.get(url, headers={"User-Agent": "CognitionOS-ToolRunner/1.0"})
+                resp.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Search request failed: {exc}"}
+
+        pattern = re.compile(r'<a[^>]+class=\"result__a\"[^>]+href=\"([^\"]+)\"[^>]*>(.*?)</a>')
+        results = []
+        for match in pattern.finditer(resp.text):
+            href = match.group(1)
+            title_html = match.group(2)
+            title = re.sub(r"<.*?>", "", title_html)
+            title = html.unescape(title).strip()
+            results.append({"title": title, "url": href})
+            if len(results) >= max(1, min(20, num_results)):
+                break
+
+        return {"output": results}
 
     async def _execute_sql(
         self,
@@ -370,17 +551,37 @@ class SandboxExecutor:
     ) -> Dict[str, Any]:
         """Execute SQL query."""
         query = parameters.get("query")
+        if not isinstance(query, str) or not query.strip():
+            return {"error": "Invalid parameter: query is required"}
 
-        # Validate query (only SELECT allowed for database_read permission)
-        if not query.strip().upper().startswith("SELECT"):
-            return {"error": "Only SELECT queries allowed with database_read permission"}
+        normalized = query.strip().upper()
+        if not (normalized.startswith("SELECT") or normalized.startswith("EXPLAIN")):
+            return {"error": "Only SELECT/EXPLAIN queries allowed with database_read permission"}
+        if ";" in query.strip().rstrip(";"):
+            return {"error": "Multiple statements are not allowed"}
 
-        return {
-            "output": [
-                {"id": 1, "name": "Sample Row 1"},
-                {"id": 2, "name": "Sample Row 2"}
-            ]
-        }
+        try:
+            import asyncpg
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"asyncpg not available: {exc}"}
+
+        try:
+            conn = await asyncpg.connect(config.database_url, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Failed to connect to database: {exc}"}
+
+        try:
+            rows = await conn.fetch(query, timeout=timeout)
+            max_rows = int(os.getenv("SANDBOX_SQL_MAX_ROWS", "200"))
+            out = [dict(r) for r in rows[: max(1, min(5000, max_rows))]]
+            return {"output": out}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"SQL query failed: {exc}"}
+        finally:
+            try:
+                await conn.close()
+            except Exception:
+                pass
 
 
 # ============================================================================

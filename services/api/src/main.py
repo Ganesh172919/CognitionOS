@@ -4,8 +4,11 @@ CognitionOS V3 API Service - Main Application
 FastAPI application providing REST APIs for the V3 clean architecture.
 """
 
+import logging
 import os
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from typing import Any, Dict
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
@@ -29,6 +32,9 @@ from infrastructure.observability import (
     PrometheusMiddleware,
     create_metrics_app,
 )
+from infrastructure.middleware.api_key_auth import APIKeyAuthMiddleware
+from infrastructure.middleware.tenant_context import TenantContextMiddleware, TenantIsolationMiddleware
+from services.api.src.middleware.saas_context import TenantRepositoryProxy, APIKeyRepositoryProxy
 
 
 # Configuration
@@ -40,56 +46,63 @@ config = get_config()
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
-    print(f"Starting {config.service_name} v{config.service_version}")
-    print(f"Environment: {config.environment}")
-    print(f"API URL: http://{config.api.host}:{config.api.port}")
-    
+    logger.info("Starting %s v%s", config.service_name, config.service_version)
+    logger.info("Environment: %s", config.environment)
+    logger.info("API URL: http://%s:%s", config.api.host, config.api.port)
+
     # Initialize tracing
     if config.observability.enable_tracing:
         setup_tracing(service_name=config.service_name)
         instrument_fastapi(app)
-        print(f"OpenTelemetry tracing enabled (Jaeger: {config.observability.jaeger_host}:{config.observability.jaeger_port})")
-    
+        logger.info(
+            "OpenTelemetry tracing enabled (Jaeger: %s:%s)",
+            config.observability.jaeger_host,
+            config.observability.jaeger_port,
+        )
+
     # Initialize metrics
     if config.observability.enable_metrics:
-        print(f"Prometheus metrics enabled on /metrics")
-    
+        logger.info("Prometheus metrics enabled on /metrics")
+
     # Initialize Redis connection pool
     try:
         from infrastructure.persistence.redis_pool import RedisPoolManager
+
         redis_pool = await RedisPoolManager.get_instance()
-        print("Redis connection pool initialized")
+        logger.info("Redis connection pool initialized")
     except Exception as e:
-        print(f"Warning: Failed to initialize Redis pool: {e}")
+        logger.warning("Failed to initialize Redis pool: %s", e)
     
     yield
-    
+
     # Shutdown - graceful cleanup
-    print("Shutting down gracefully...")
-    
-    # Give existing requests time to complete (configurable timeout)
+    logger.info("Shutting down gracefully...")
+
     import asyncio
+
     shutdown_timeout = config.api.shutdown_timeout_seconds
-    print(f"Waiting for in-flight requests to complete ({shutdown_timeout}s)...")
+    logger.info("Waiting for in-flight requests to complete (%ss)...", shutdown_timeout)
     await asyncio.sleep(shutdown_timeout)
-    
+
     # Close database connections
     try:
         from services.api.src.dependencies.injection import close_db
+
         await close_db()
-        print("Database connections closed")
+        logger.info("Database connections closed")
     except Exception as e:
-        print(f"Error closing database: {e}")
-    
+        logger.error("Error closing database: %s", e)
+
     # Close Redis connection pool
     try:
         from infrastructure.persistence.redis_pool import RedisPoolManager
+
         await RedisPoolManager.reset()
-        print("Redis connection pool closed")
+        logger.info("Redis connection pool closed")
     except Exception as e:
-        print(f"Error closing Redis pool: {e}")
-    
-    print("Shutdown complete")
+        logger.error("Error closing Redis pool: %s", e)
+
+    logger.info("Shutdown complete")
 
 
 # Create FastAPI application
@@ -123,6 +136,23 @@ app = FastAPI(
 # Request ID middleware (should be first)
 from services.api.src.middleware.request_id import RequestIDMiddleware
 app.add_middleware(RequestIDMiddleware)
+
+# Multi-tenancy & API key context (optional; resolved when headers are present)
+_tenant_repo_proxy = TenantRepositoryProxy()
+_api_key_repo_proxy = APIKeyRepositoryProxy()
+
+# Order matters: last-added middleware runs first in Starlette.
+app.add_middleware(TenantIsolationMiddleware)
+app.add_middleware(
+    TenantContextMiddleware,
+    tenant_repository=_tenant_repo_proxy,
+    require_tenant=False,
+)
+app.add_middleware(
+    APIKeyAuthMiddleware,
+    api_key_repository=_api_key_repo_proxy,
+    tenant_repository=_tenant_repo_proxy,
+)
 
 # CORS middleware
 app.add_middleware(
@@ -286,6 +316,10 @@ app.include_router(tenants.router)
 app.include_router(subscriptions.router)
 app.include_router(plugins.router)
 
+# Stripe webhooks (billing lifecycle)
+from services.api.src.routes import webhooks
+app.include_router(webhooks.router)
+
 # Import and include advanced analytics routes
 from services.api.src.routes import analytics_advanced, engagement, marketplace
 app.include_router(analytics_advanced.router)
@@ -339,6 +373,27 @@ app.include_router(phase5_intelligence.router)
 # Import and include Phase 6 systems routes (cognitive AI, multi-agent, collaboration, data mesh, security, workflows, profiling)
 from services.api.src.routes import phase6_systems
 app.include_router(phase6_systems.router)
+
+# ==================== Admin Panel API ====================
+
+try:
+    from services.admin_panel_api.src.routers.admin_dashboard import router as admin_dashboard_router
+
+    app.include_router(admin_dashboard_router)
+    logger.info("Mounted admin dashboard API under /api/admin")
+except Exception as e:
+    logger.warning("Failed to mount admin dashboard API: %s", e)
+
+# ==================== v4 Stable Platform APIs ====================
+
+# v4 is additive and intentionally does not remove or change existing v3 routes.
+try:
+    from cognitionos_platform.api.v4.routers import api_router as platform_v4_router
+
+    app.include_router(platform_v4_router)
+    logger.info("Mounted platform v4 API routes under /api/v4")
+except Exception as e:
+    logger.warning("Failed to mount platform v4 API routes: %s", e)
 
 
 # ==================== Main Entry Point ====================

@@ -369,7 +369,7 @@ class AdaptiveCacheSystem:
 
         try:
             return sys.getsizeof(value)
-        except:
+        except Exception:
             return 1024  # Default 1KB
 
     async def get_statistics(self) -> Dict[str, Any]:

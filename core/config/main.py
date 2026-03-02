@@ -5,15 +5,16 @@ Provides configuration management for all services and components.
 Uses Pydantic v2 for validation and settings management.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatabaseConfig(BaseSettings):
     """Database configuration"""
-    model_config = SettingsConfigDict(env_prefix='DB_', case_sensitive=False)
-    
+
+    model_config = SettingsConfigDict(env_prefix="DB_", case_sensitive=False)
+
     host: str = Field(default="localhost", description="Database host")
     port: int = Field(default=5432, description="Database port")
     database: str = Field(default="cognitionos", description="Database name")
@@ -22,7 +23,7 @@ class DatabaseConfig(BaseSettings):
     pool_size: int = Field(default=10, description="Connection pool size")
     max_overflow: int = Field(default=20, description="Max connections overflow")
     pool_timeout: int = Field(default=30, description="Pool timeout in seconds")
-    
+
     @property
     def url(self) -> str:
         """Get database URL"""
@@ -31,14 +32,15 @@ class DatabaseConfig(BaseSettings):
 
 class RedisConfig(BaseSettings):
     """Redis configuration"""
-    model_config = SettingsConfigDict(env_prefix='REDIS_', case_sensitive=False)
-    
+
+    model_config = SettingsConfigDict(env_prefix="REDIS_", case_sensitive=False)
+
     host: str = Field(default="localhost", description="Redis host")
     port: int = Field(default=6379, description="Redis port")
     db: int = Field(default=0, description="Redis database number")
     password: Optional[str] = Field(default=None, description="Redis password")
     max_connections: int = Field(default=50, description="Max connections in pool")
-    
+
     @property
     def url(self) -> str:
         """Get Redis URL"""
@@ -49,14 +51,15 @@ class RedisConfig(BaseSettings):
 
 class RabbitMQConfig(BaseSettings):
     """RabbitMQ configuration"""
-    model_config = SettingsConfigDict(env_prefix='RABBITMQ_', case_sensitive=False)
-    
+
+    model_config = SettingsConfigDict(env_prefix="RABBITMQ_", case_sensitive=False)
+
     host: str = Field(default="localhost", description="RabbitMQ host")
     port: int = Field(default=5672, description="RabbitMQ port")
     username: str = Field(default="guest", description="RabbitMQ username")
     password: str = Field(default="guest", description="RabbitMQ password")
     virtual_host: str = Field(default="/", description="Virtual host")
-    
+
     @property
     def url(self) -> str:
         """Get RabbitMQ URL"""
@@ -65,8 +68,9 @@ class RabbitMQConfig(BaseSettings):
 
 class LLMConfig(BaseSettings):
     """LLM provider configuration"""
-    model_config = SettingsConfigDict(env_prefix='LLM_', case_sensitive=False)
-    
+
+    model_config = SettingsConfigDict(env_prefix="LLM_", case_sensitive=False)
+
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
     default_provider: str = Field(default="openai", description="Default LLM provider")
@@ -78,8 +82,9 @@ class LLMConfig(BaseSettings):
 
 class CeleryConfig(BaseSettings):
     """Celery task queue configuration"""
-    model_config = SettingsConfigDict(env_prefix='CELERY_', case_sensitive=False)
-    
+
+    model_config = SettingsConfigDict(env_prefix="CELERY_", case_sensitive=False)
+
     broker_url: str = Field(default="redis://localhost:6379/0", description="Message broker URL")
     result_backend: str = Field(default="redis://localhost:6379/0", description="Result backend URL")
     task_serializer: str = Field(default="json", description="Task serializer")
@@ -94,8 +99,9 @@ class CeleryConfig(BaseSettings):
 
 class APIConfig(BaseSettings):
     """API service configuration"""
-    model_config = SettingsConfigDict(env_prefix='API_', case_sensitive=False)
-    
+
+    model_config = SettingsConfigDict(env_prefix="API_", case_sensitive=False)
+
     host: str = Field(default="0.0.0.0", description="API host")
     port: int = Field(default=8100, description="API port")
     debug: bool = Field(default=False, description="Debug mode")
@@ -104,7 +110,7 @@ class APIConfig(BaseSettings):
     log_level: str = Field(default="info", description="Logging level")
     cors_origins: List[str] = Field(
         default=["http://localhost:3000", "http://localhost:8000"],
-        description="Allowed CORS origins"
+        description="Allowed CORS origins",
     )
     rate_limit_per_minute: int = Field(default=60, description="Rate limit per minute")
     max_request_size: int = Field(default=10485760, description="Max request size in bytes (10MB)")
@@ -113,48 +119,103 @@ class APIConfig(BaseSettings):
 
 class SecurityConfig(BaseSettings):
     """Security configuration"""
-    model_config = SettingsConfigDict(env_prefix='SECURITY_', case_sensitive=False)
-    
+
+    model_config = SettingsConfigDict(env_prefix="SECURITY_", case_sensitive=False)
+
     secret_key: str = Field(default="change-me-in-production", description="Secret key for JWT")
     algorithm: str = Field(default="HS256", description="JWT algorithm")
     access_token_expire_minutes: int = Field(default=30, description="Access token expiration")
     refresh_token_expire_days: int = Field(default=7, description="Refresh token expiration")
-    
-    # API key settings
     api_key_header: str = Field(default="X-API-Key", description="API key header name")
-    
-    # Encryption
     encryption_algorithm: str = Field(default="AES-256-GCM", description="Encryption algorithm")
 
 
 class ObservabilityConfig(BaseSettings):
     """Observability configuration"""
-    model_config = SettingsConfigDict(env_prefix='OBSERVABILITY_', case_sensitive=False)
-    
-    # Logging
+
+    model_config = SettingsConfigDict(env_prefix="OBSERVABILITY_", case_sensitive=False)
+
     log_level: str = Field(default="info", description="Logging level")
     log_format: str = Field(default="json", description="Log format (json or text)")
-    
-    # Tracing
     enable_tracing: bool = Field(default=True, description="Enable distributed tracing")
     jaeger_host: str = Field(default="localhost", description="Jaeger host")
     jaeger_port: int = Field(default=6831, description="Jaeger port")
-    
-    # Metrics
     enable_metrics: bool = Field(default=True, description="Enable Prometheus metrics")
     metrics_port: int = Field(default=9090, description="Metrics port")
 
 
+class StripeConfig(BaseSettings):
+    """Stripe billing configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="STRIPE_", case_sensitive=False)
+
+    api_key: Optional[str] = Field(default=None, description="Stripe API secret key")
+    webhook_secret: Optional[str] = Field(default=None, description="Stripe webhook signing secret")
+    price_pro_monthly: Optional[str] = Field(default=None, description="Stripe price id for PRO monthly")
+    price_pro_yearly: Optional[str] = Field(default=None, description="Stripe price id for PRO yearly")
+    price_team_monthly: Optional[str] = Field(default=None, description="Stripe price id for TEAM monthly")
+    price_team_yearly: Optional[str] = Field(default=None, description="Stripe price id for TEAM yearly")
+    price_enterprise_monthly: Optional[str] = Field(
+        default=None, description="Stripe price id for ENTERPRISE monthly (optional)"
+    )
+    price_enterprise_yearly: Optional[str] = Field(
+        default=None, description="Stripe price id for ENTERPRISE yearly (optional)"
+    )
+    default_success_url: str = Field(
+        default="http://localhost:3000/billing/success",
+        description="Default Stripe checkout success URL",
+    )
+    default_cancel_url: str = Field(
+        default="http://localhost:3000/billing/cancel",
+        description="Default Stripe checkout cancel URL",
+    )
+    default_portal_return_url: str = Field(
+        default="http://localhost:3000/billing",
+        description="Default Stripe billing portal return URL",
+    )
+
+
+class BillingConfig(BaseSettings):
+    """Billing and monetization configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="BILLING_", case_sensitive=False)
+
+    provider: str = Field(default="mock", description="Billing provider (mock/stripe)")
+    enable_trials: bool = Field(default=True, description="Enable free trials on self-serve tenants")
+    default_trial_days: int = Field(default=14, description="Default trial length in days")
+    stripe: StripeConfig = Field(default_factory=StripeConfig)
+    usage_event_dedupe: bool = Field(
+        default=True, description="Enable idempotent usage event recording where supported"
+    )
+
+    def stripe_price_map(self) -> Dict[str, str]:
+        """Map logical plan keys to Stripe price IDs."""
+        mapping = {
+            "pro_monthly": self.stripe.price_pro_monthly,
+            "pro_yearly": self.stripe.price_pro_yearly,
+            "team_monthly": self.stripe.price_team_monthly,
+            "team_yearly": self.stripe.price_team_yearly,
+            "enterprise_monthly": self.stripe.price_enterprise_monthly,
+            "enterprise_yearly": self.stripe.price_enterprise_yearly,
+        }
+        return {k: v for k, v in mapping.items() if v}
+
+
 class CognitionOSConfig(BaseSettings):
     """Main CognitionOS configuration"""
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', case_sensitive=False)
-    
-    # Service metadata
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
     service_name: str = Field(default="cognitionos-api", description="Service name")
     service_version: str = Field(default="3.0.0", description="Service version")
-    environment: str = Field(default="development", description="Environment (development/staging/production)")
-    
-    # Sub-configurations
+    environment: str = Field(
+        default="development", description="Environment (development/staging/production)"
+    )
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     rabbitmq: RabbitMQConfig = Field(default_factory=RabbitMQConfig)
@@ -163,32 +224,32 @@ class CognitionOSConfig(BaseSettings):
     api: APIConfig = Field(default_factory=APIConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
-    
+    billing: BillingConfig = Field(default_factory=BillingConfig)
+
     @property
     def is_production(self) -> bool:
         """Check if running in production"""
         return self.environment == "production"
-    
+
     @property
     def is_development(self) -> bool:
         """Check if running in development"""
         return self.environment == "development"
 
 
-# Singleton configuration instance
-_config: Optional[CognitionOSConfig] = None
+_main_config: Optional[CognitionOSConfig] = None
 
 
 def get_config() -> CognitionOSConfig:
     """Get or create configuration singleton"""
-    global _config
-    if _config is None:
-        _config = CognitionOSConfig()
-    return _config
+    global _main_config
+    if _main_config is None:
+        _main_config = CognitionOSConfig()
+    return _main_config
 
 
 def reload_config() -> CognitionOSConfig:
     """Reload configuration (useful for testing)"""
-    global _config
-    _config = CognitionOSConfig()
-    return _config
+    global _main_config
+    _main_config = CognitionOSConfig()
+    return _main_config

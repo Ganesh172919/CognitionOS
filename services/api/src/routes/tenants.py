@@ -4,8 +4,9 @@ Tenant API Routes
 Provides REST endpoints for tenant management in multi-tenant architecture.
 """
 
+import hashlib
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -15,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.src.auth.dependencies import CurrentUser, get_current_user, require_role
 from services.api.src.dependencies.injection import get_db_session
+from infrastructure.middleware.api_key_auth import generate_api_key
 from infrastructure.persistence.tenant_repository import PostgreSQLTenantRepository
+from infrastructure.persistence.api_key_repository import PostgresAPIKeyRepository
 from infrastructure.middleware.tenant_context import get_current_tenant
 from core.domain.tenant.entities import Tenant, TenantStatus, TenantSettings
 

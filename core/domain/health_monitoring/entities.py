@@ -6,7 +6,7 @@ NO external dependencies except Python stdlib.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
@@ -207,8 +207,14 @@ class AgentHealthStatus:
 
     def update_heartbeat(self) -> None:
         """Update last heartbeat timestamp"""
-        self.last_heartbeat = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        now = datetime.utcnow()
+        # Ensure monotonic updates even on coarse/identical clock ticks.
+        if self.last_heartbeat and now <= self.last_heartbeat:
+            now = self.last_heartbeat + timedelta(microseconds=1)
+        self.last_heartbeat = now
+        if self.updated_at and now <= self.updated_at:
+            now = self.updated_at + timedelta(microseconds=1)
+        self.updated_at = now
 
     def update_metrics(
         self,

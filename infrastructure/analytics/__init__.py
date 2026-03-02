@@ -13,6 +13,12 @@ from infrastructure.analytics.usage_analytics import (
     ForecastMethod,
     AnomalyType
 )
+from infrastructure.analytics.analytics_aggregator import (
+    AnalyticsAggregator,
+    AggregatedMetric,
+    MetricType,
+    AggregationWindow,
+)
 
 __all__ = [
     "RevenueAnalyticsEngine",
@@ -23,5 +29,10 @@ __all__ = [
     "UsageAnomaly",
     "UsageAnalytics",
     "ForecastMethod",
-    "AnomalyType"
+    "AnomalyType",
+    "AnalyticsAggregator",
+    "AggregatedMetric",
+    "MetricType",
+    "AggregationWindow",
 ]
+

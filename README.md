@@ -86,6 +86,21 @@ cd CognitionOS
 
 ### Option 2: Localhost Setup
 
+**Windows (PowerShell):**
+```powershell
+# Clone repository
+git clone https://github.com/Ganesh172919/CognitionOS.git
+cd CognitionOS
+
+# Run localhost stack (creates .env from .env.localhost, starts Docker, runs migrations)
+.\LOCAL_RUNBOOK.ps1
+
+# Start frontend dashboard
+cd frontend; npm install; npm run dev
+# Open http://localhost:3000
+```
+
+**Unix (Bash):**
 ```bash
 # Clone repository
 git clone https://github.com/Ganesh172919/CognitionOS.git
@@ -93,13 +108,15 @@ cd CognitionOS
 
 # Run localhost setup script
 ./scripts/setup-localhost.sh
-
-# This will:
-# - Set up environment variables
-# - Start all services with docker compose
-# - Run database migrations
-# - Verify system health
 ```
+
+This will:
+- Copy `.env.localhost` to `.env` if `.env` does not exist
+- Start PostgreSQL, Redis, RabbitMQ via `docker-compose.local.yml`
+- Run database migrations (`database/run_migrations.py`)
+- Start the API on port 8100
+
+**Frontend:** Set `NEXT_PUBLIC_API_URL=http://localhost:8100` in `frontend/.env.local` (see `frontend/.env.local.example`) so the dashboard uses the main API for localhost.
 
 ### Option 3: Manual Setup
 
@@ -108,17 +125,18 @@ cd CognitionOS
 git clone https://github.com/Ganesh172919/CognitionOS.git
 cd CognitionOS
 
-# Set up environment
+# Set up environment (for Docker: use postgres/redis/rabbitmq as DB_HOST/REDIS_HOST/RABBITMQ_HOST)
 cp .env.example .env
-# Edit .env with your API keys
+# Or for localhost: cp .env.localhost .env
+# Edit .env with your API keys. DATABASE_URL is optional (built from DB_* if unset).
 
-# Start all services
-docker compose up -d
+# Start localhost stack (Postgres, Redis, RabbitMQ, API)
+docker compose -f docker-compose.local.yml up -d
 
 # Check health
-curl http://localhost:8100/health  # V3 API
-curl http://localhost:8000/health  # API Gateway
-curl http://localhost:8100/api/v3/executions/health  # P0 Execution Persistence
+curl http://localhost:8100/health
+curl http://localhost:8100/api/v3/dashboard
+curl http://localhost:8100/api/v3/health/live
 ```
 
 ### Test the System (V3 API)

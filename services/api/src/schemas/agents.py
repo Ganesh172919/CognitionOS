@@ -39,7 +39,7 @@ class RegisterAgentDefinitionRequest(BaseModel):
     version: str = Field(..., pattern=r'^\d+\.\d+\.\d+$', description="Semantic version")
     name: str = Field(..., min_length=1, max_length=255, description="Agent name")
     description: str = Field(..., description="Agent description")
-    capabilities: List[CapabilitySchema] = Field(..., min_items=1, description="Agent capabilities")
+    capabilities: List[CapabilitySchema] = Field(..., min_length=1, description="Agent capabilities")
     llm_model_config: ModelConfigSchema = Field(..., description="Model configuration", alias="model_config")
     system_prompt: str = Field(..., description="System prompt template")
     budget_limits: BudgetLimitsSchema = Field(..., description="Budget limits")

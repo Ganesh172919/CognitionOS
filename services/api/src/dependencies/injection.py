@@ -5,7 +5,11 @@ Provides dependency injection for use cases, repositories, and infrastructure.
 """
 
 import os
-from typing import AsyncGenerator
+import logging
+from typing import Any, AsyncGenerator
+
+from fastapi import Depends
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, AsyncEngine
 from sqlalchemy.orm import sessionmaker
 
@@ -76,19 +80,19 @@ def get_engine() -> AsyncEngine:
             pool_timeout=config.database.pool_timeout,
             echo=config.api.debug,
         )
+        # Bind session factory lazily to avoid import-time engine creation side-effects.
+        async_session_factory.configure(bind=_engine)
     return _engine
 
 
-# Session factory
-async_session_factory = sessionmaker(
-    bind=get_engine(),
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+# Session factory (configured/bound on first `get_engine()` call).
+async_session_factory = sessionmaker(class_=AsyncSession, expire_on_commit=False)
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session dependency"""
+    # Ensure engine/session factory are initialized for this process.
+    get_engine()
     async with async_session_factory() as session:
         try:
             yield session
@@ -106,6 +110,7 @@ async def close_db() -> None:
     if _engine is not None:
         await _engine.dispose()
         _engine = None
+        async_session_factory.configure(bind=None)
 
 
 # Event bus (singleton)
@@ -127,6 +132,7 @@ async def get_workflow_repository(
 ) -> PostgreSQLWorkflowRepository:
     """Get workflow repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLWorkflowRepository(session)
     return PostgreSQLWorkflowRepository(session)
@@ -137,6 +143,7 @@ async def get_workflow_execution_repository(
 ) -> PostgreSQLWorkflowExecutionRepository:
     """Get workflow execution repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLWorkflowExecutionRepository(session)
     return PostgreSQLWorkflowExecutionRepository(session)
@@ -191,7 +198,7 @@ async def check_database_health() -> bool:
     try:
         engine = get_engine()
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
         return True
     except Exception:
         return False
@@ -212,7 +219,6 @@ async def check_rabbitmq_health() -> bool:
     """Check RabbitMQ connection health"""
     try:
         import aio_pika
-        import logging
         logger = logging.getLogger(__name__)
         
         config = get_config()
@@ -241,6 +247,7 @@ async def get_checkpoint_repository(
 ) -> PostgreSQLCheckpointRepository:
     """Get checkpoint repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLCheckpointRepository(session)
     return PostgreSQLCheckpointRepository(session)
@@ -261,6 +268,7 @@ async def get_health_repository(
 ) -> PostgreSQLAgentHealthRepository:
     """Get agent health repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLAgentHealthRepository(session)
     return PostgreSQLAgentHealthRepository(session)
@@ -271,6 +279,7 @@ async def get_health_incident_repository(
 ) -> PostgreSQLHealthIncidentRepository:
     """Get health incident repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLHealthIncidentRepository(session)
     return PostgreSQLHealthIncidentRepository(session)
@@ -295,6 +304,7 @@ async def get_budget_repository(
 ) -> PostgreSQLWorkflowBudgetRepository:
     """Get workflow budget repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLWorkflowBudgetRepository(session)
     return PostgreSQLWorkflowBudgetRepository(session)
@@ -305,6 +315,7 @@ async def get_cost_tracking_repository(
 ) -> PostgreSQLCostTrackingRepository:
     """Get cost tracking repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLCostTrackingRepository(session)
     return PostgreSQLCostTrackingRepository(session)
@@ -330,6 +341,7 @@ async def get_working_memory_repository(
     """Get working memory repository dependency"""
     from infrastructure.persistence.memory_hierarchy_repository import PostgreSQLWorkingMemoryRepository
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLWorkingMemoryRepository(session)
     return PostgreSQLWorkingMemoryRepository(session)
@@ -341,6 +353,7 @@ async def get_episodic_memory_repository(
     """Get episodic memory repository dependency"""
     from infrastructure.persistence.memory_hierarchy_repository import PostgreSQLEpisodicMemoryRepository
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLEpisodicMemoryRepository(session)
     return PostgreSQLEpisodicMemoryRepository(session)
@@ -352,6 +365,7 @@ async def get_longterm_memory_repository(
     """Get long-term memory repository dependency"""
     from infrastructure.persistence.memory_hierarchy_repository import PostgreSQLLongTermMemoryRepository
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLLongTermMemoryRepository(session)
     return PostgreSQLLongTermMemoryRepository(session)
@@ -519,6 +533,7 @@ async def get_tenant_repository(
 ) -> PostgreSQLTenantRepository:
     """Get tenant repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLTenantRepository(session)
     return PostgreSQLTenantRepository(session)
@@ -529,6 +544,7 @@ async def get_api_key_repository(
 ) -> PostgresAPIKeyRepository:
     """Get API key repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgresAPIKeyRepository(session)
     return PostgresAPIKeyRepository(session)
@@ -541,6 +557,7 @@ async def get_subscription_repository(
 ) -> PostgreSQLSubscriptionRepository:
     """Get subscription repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLSubscriptionRepository(session)
     return PostgreSQLSubscriptionRepository(session)
@@ -551,6 +568,7 @@ async def get_invoice_repository(
 ) -> PostgreSQLInvoiceRepository:
     """Get invoice repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLInvoiceRepository(session)
     return PostgreSQLInvoiceRepository(session)
@@ -561,6 +579,7 @@ async def get_usage_record_repository(
 ) -> PostgreSQLUsageRecordRepository:
     """Get usage record repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLUsageRecordRepository(session)
     return PostgreSQLUsageRecordRepository(session)
@@ -587,36 +606,11 @@ async def get_usage_metering_service(
 
 
 async def get_billing_service(
-    session: AsyncSession = None
-) -> BillingService:
-    """Get billing service dependency"""
-    import os
-    from infrastructure.billing.provider import (
-        StripeBillingProvider,
-        MockBillingProvider,
-    )
-    
-    # Use environment variable to determine billing provider
-    billing_mode = os.getenv("BILLING_PROVIDER", "mock").lower()
-    
-    if billing_mode == "stripe":
-        stripe_api_key = os.getenv("STRIPE_API_KEY")
-        if not stripe_api_key:
-            raise ValueError("STRIPE_API_KEY must be set when using Stripe billing provider")
-        billing_provider = StripeBillingProvider(api_key=stripe_api_key)
-    elif billing_mode == "mock":
-        billing_provider = MockBillingProvider()
-    else:
-        raise ValueError(f"Unknown billing provider: {billing_mode}. Use 'stripe' or 'mock'")
-    
-    subscription_repo = await get_subscription_repository(session)
-    invoice_repo = await get_invoice_repository(session)
-    
-    return BillingService(
-        subscription_repository=subscription_repo,
-        invoice_repository=invoice_repo,
-        billing_provider=billing_provider,
-    )
+    session: AsyncSession = Depends(get_db_session),
+) -> Any:
+    """Get provider-aware billing orchestrator dependency."""
+    from infrastructure.billing.orchestrator import BillingOrchestrator
+    return BillingOrchestrator(session)
 
 
 # ==================== Plugin Dependencies ====================
@@ -626,6 +620,7 @@ async def get_plugin_repository(
 ) -> PostgreSQLPluginRepository:
     """Get plugin repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLPluginRepository(session)
     return PostgreSQLPluginRepository(session)
@@ -636,6 +631,7 @@ async def get_plugin_execution_repository(
 ) -> PostgreSQLPluginExecutionRepository:
     """Get plugin execution repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLPluginExecutionRepository(session)
     return PostgreSQLPluginExecutionRepository(session)
@@ -646,6 +642,7 @@ async def get_plugin_installation_repository(
 ) -> PostgreSQLPluginInstallationRepository:
     """Get plugin installation repository dependency"""
     if session is None:
+        get_engine()
         async with async_session_factory() as session:
             return PostgreSQLPluginInstallationRepository(session)
     return PostgreSQLPluginInstallationRepository(session)

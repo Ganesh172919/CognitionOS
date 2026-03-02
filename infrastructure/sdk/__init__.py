@@ -1,6 +1,5 @@
 """
-SDK Generation Module
-Provides automatic SDK generation in multiple languages.
+SDK Module — Auto-Generator and Developer Client
 """
 
 from .auto_generator import (
@@ -11,6 +10,13 @@ from .auto_generator import (
     GeneratedSDK,
     OpenAPISpec
 )
+from .cognition_sdk import (
+    CognitionSDK,
+    SDKConfig,
+    APIResponse,
+    AuthMethod,
+    WebhookRegistration,
+)
 
 __all__ = [
     "SDKAutoGenerator",
@@ -18,5 +24,11 @@ __all__ = [
     "SDKStyle",
     "SDKGenerationConfig",
     "GeneratedSDK",
-    "OpenAPISpec"
+    "OpenAPISpec",
+    "CognitionSDK",
+    "SDKConfig",
+    "APIResponse",
+    "AuthMethod",
+    "WebhookRegistration",
 ]
+

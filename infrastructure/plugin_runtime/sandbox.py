@@ -112,8 +112,8 @@ class PluginSandbox:
             # Reset limits
             try:
                 resource.setrlimit(resource.RLIMIT_CPU, (soft, hard))
-            except:
-                pass
+            except Exception as e:
+                logger.debug("Could not reset CPU limit: %s", e)
     
     def _create_safe_globals(self, plugin_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """

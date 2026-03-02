@@ -11,6 +11,7 @@ from typing import Optional, List
 from uuid import UUID
 
 from sqlalchemy import select, func, and_, or_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.domain.billing.entities import (
@@ -73,16 +74,26 @@ class PostgreSQLSubscriptionRepository(SubscriptionRepository):
             raise
     
     async def get_by_tenant(self, tenant_id: UUID) -> Optional[Subscription]:
-        """Get active subscription for a tenant"""
+        """Get current subscription for a tenant (active/trialing/past_due/unpaid/paused)."""
         try:
             stmt = (
                 select(SubscriptionModel)
                 .where(
                     and_(
                         SubscriptionModel.tenant_id == tenant_id,
-                        SubscriptionModel.status == SubscriptionStatus.ACTIVE
+                        SubscriptionModel.status.in_(
+                            [
+                                SubscriptionStatus.ACTIVE,
+                                SubscriptionStatus.TRIALING,
+                                SubscriptionStatus.PAST_DUE,
+                                SubscriptionStatus.UNPAID,
+                                SubscriptionStatus.PAUSED,
+                            ]
+                        ),
                     )
                 )
+                .order_by(SubscriptionModel.updated_at.desc())
+                .limit(1)
             )
             result = await self.session.execute(stmt)
             subscription_model = result.scalar_one_or_none()
@@ -559,11 +570,53 @@ class PostgreSQLUsageRecordRepository(UsageRecordRepository):
     async def create(self, usage_record: UsageRecord) -> UsageRecord:
         """Create a new usage record"""
         try:
+            # Idempotent insert when event_id is provided (prevents double-counting on retries).
+            if usage_record.event_id:
+                table = UsageRecordModel.__table__
+                stmt = (
+                    pg_insert(table)
+                    .values(
+                        id=usage_record.id,
+                        tenant_id=usage_record.tenant_id,
+                        resource_type=usage_record.resource_type,
+                        quantity=usage_record.quantity,
+                        unit=usage_record.unit,
+                        timestamp=usage_record.timestamp,
+                        event_id=usage_record.event_id,
+                        usage_metadata=usage_record.metadata,
+                    )
+                    .on_conflict_do_nothing(index_elements=["tenant_id", "event_id"])
+                    .returning(table.c.id)
+                )
+                result = await self.session.execute(stmt)
+                inserted_id = result.scalar_one_or_none()
+                if inserted_id is None:
+                    # Conflict: return existing record for the same event id.
+                    existing_stmt = (
+                        select(UsageRecordModel)
+                        .where(
+                            and_(
+                                UsageRecordModel.tenant_id == usage_record.tenant_id,
+                                UsageRecordModel.event_id == usage_record.event_id,
+                            )
+                        )
+                        .limit(1)
+                    )
+                    existing = (await self.session.execute(existing_stmt)).scalar_one_or_none()
+                    if existing is not None:
+                        return self._to_entity(existing)
+                    # Extremely rare race: conflicting row not yet visible in this transaction.
+                    return usage_record
+
+                row_stmt = select(UsageRecordModel).where(UsageRecordModel.id == inserted_id).limit(1)
+                model = (await self.session.execute(row_stmt)).scalar_one()
+                return self._to_entity(model)
+
             usage_record_model = self._to_model(usage_record)
             self.session.add(usage_record_model)
             await self.session.flush()
             await self.session.refresh(usage_record_model)
-            
+
             return self._to_entity(usage_record_model)
         except Exception as e:
             logger.error(f"Error creating usage record {usage_record.id}: {e}")
@@ -719,6 +772,7 @@ class PostgreSQLUsageRecordRepository(UsageRecordRepository):
             quantity=model.quantity,
             unit=model.unit,
             timestamp=model.timestamp,
+            event_id=getattr(model, "event_id", None),
             metadata=model.usage_metadata or {},
         )
     
@@ -731,5 +785,6 @@ class PostgreSQLUsageRecordRepository(UsageRecordRepository):
             quantity=entity.quantity,
             unit=entity.unit,
             timestamp=entity.timestamp,
+            event_id=entity.event_id,
             usage_metadata=entity.metadata,
         )

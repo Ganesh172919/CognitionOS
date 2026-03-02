@@ -413,7 +413,7 @@ Return only the test code in a code block."""
                 node.name for node in ast.walk(tree)
                 if isinstance(node, ast.FunctionDef) and not node.name.startswith('_')
             ]
-        except:
+        except Exception:
             functions = []
 
         tests = []

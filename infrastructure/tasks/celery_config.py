@@ -33,6 +33,14 @@ celery_app.conf.update(
     task_routes={
         'infrastructure.tasks.workflow_tasks.*': {'queue': 'workflows'},
         'infrastructure.tasks.agent_tasks.*': {'queue': 'agents'},
+        'infrastructure.tasks.metering_tasks.*': {'queue': 'metering'},
+    },
+    beat_schedule={
+        # Flush Redis-buffered usage counters into Postgres usage_records.
+        "flush_api_call_usage_every_minute": {
+            "task": "infrastructure.tasks.metering_tasks.flush_api_call_usage",
+            "schedule": 60.0,
+        },
     },
     # Result expiration
     result_expires=3600,
@@ -45,6 +53,7 @@ celery_app.conf.update(
 celery_app.autodiscover_tasks([
     'infrastructure.tasks.workflow_tasks',
     'infrastructure.tasks.agent_tasks',
+    'infrastructure.tasks.metering_tasks',
 ])
 
 

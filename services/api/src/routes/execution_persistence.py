@@ -234,15 +234,46 @@ async def resume_execution(
         
         # If no snapshot exists, create one from current execution state
         if not snapshot:
+            # Build a best-effort snapshot from persisted step executions + workflow definition.
+            from infrastructure.persistence.workflow_repository import PostgreSQLWorkflowRepository
+            from core.domain.workflow import ExecutionStatus
+
+            workflow_repo = PostgreSQLWorkflowRepository(session)
+            workflow = await workflow_repo.get_by_id(execution.workflow_id, execution.workflow_version)
+
+            step_executions = await execution_repo.get_step_executions(execution_id)
+            step_status_by_id: Dict[str, str] = {
+                se.step_id.value: se.status.value for se in step_executions
+            }
+
+            completed_steps = [
+                step_id
+                for step_id, st in step_status_by_id.items()
+                if st in {ExecutionStatus.COMPLETED.value, ExecutionStatus.SKIPPED.value}
+            ]
+            failed_steps = [
+                step_id for step_id, st in step_status_by_id.items() if st == ExecutionStatus.FAILED.value
+            ]
+            pending_steps = [
+                step_id
+                for step_id, st in step_status_by_id.items()
+                if st in {ExecutionStatus.PENDING.value, ExecutionStatus.RUNNING.value}
+            ]
+
+            all_steps: List[str] = [s.id.value for s in workflow.steps] if workflow else []
+            for step_id in all_steps:
+                if step_id not in step_status_by_id:
+                    pending_steps.append(step_id)
+
             snapshot = ExecutionSnapshot(
                 id=uuid4(),
                 execution_id=execution_id,
                 snapshot_type=SnapshotType.CHECKPOINT,
                 workflow_state={"status": execution.status.value},
-                step_states={},
-                completed_steps=[],
-                pending_steps=["step1", "step2"],  # TODO: Get from actual execution state
-                failed_steps=[],
+                step_states=step_status_by_id,
+                completed_steps=completed_steps,
+                pending_steps=pending_steps,
+                failed_steps=failed_steps,
             )
             await snapshot_repo.save(snapshot)
 
@@ -255,11 +286,12 @@ async def resume_execution(
         # Update execution status to running
         # TODO: Queue resume execution task with snapshot via message broker
 
+        next_steps = snapshot.pending_steps if request.skip_failed_steps else snapshot.get_next_steps()
         return ResumeExecutionResponse(
             execution_id=str(execution_id),
             resumed_from_snapshot=str(snapshot.id),
             status="resuming",
-            pending_steps=snapshot.get_next_steps(),
+            pending_steps=next_steps,
             message="Execution resume queued. Pending steps will be executed."
         )
 
@@ -285,9 +317,34 @@ async def get_execution_snapshots(
 ) -> List[ExecutionSnapshotResponse]:
     """Get all snapshots for an execution"""
     try:
-        # TODO: Query snapshots from database
-        # For now, return empty list
-        return []
+        from infrastructure.persistence.execution_persistence_repository import PostgreSQLExecutionSnapshotRepository
+
+        snapshot_repo = PostgreSQLExecutionSnapshotRepository(session)
+        snapshots = await snapshot_repo.get_all_for_execution(execution_id)
+
+        if snapshot_type:
+            try:
+                st = SnapshotType(snapshot_type.lower())
+                snapshots = [s for s in snapshots if s.snapshot_type == st]
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid snapshot type: {snapshot_type}",
+                )
+
+        return [
+            ExecutionSnapshotResponse(
+                id=str(s.id),
+                execution_id=str(s.execution_id),
+                snapshot_type=s.snapshot_type.value,
+                completed_steps=s.completed_steps,
+                pending_steps=s.pending_steps,
+                failed_steps=s.failed_steps,
+                created_at=s.created_at,
+                can_resume=s.can_resume_from(),
+            )
+            for s in snapshots
+        ]
 
     except Exception as e:
         raise HTTPException(
@@ -308,22 +365,32 @@ async def get_replay_comparison(
 ) -> ComparisonResult:
     """Get replay comparison results"""
     try:
-        # TODO: Query replay session and comparison results from database
-        # For now, return mock data
+        from infrastructure.persistence.execution_persistence_repository import PostgreSQLReplaySessionRepository
+
+        replay_repo = PostgreSQLReplaySessionRepository(session)
+        replay = await replay_repo.get_by_id(replay_session_id)
+        if not replay:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Replay session {replay_session_id} not found",
+            )
+
+        divergence = replay.divergence_details or {}
+        divergent_steps = divergence.get("divergent_steps") or divergence.get("divergences") or []
+        total_steps = int(divergence.get("total_steps") or 0)
+        match_pct = float(replay.match_percentage or 0.0)
+
+        matching_steps = divergence.get("matching_steps")
+        if matching_steps is None:
+            matching_steps = int(round(total_steps * (match_pct / 100))) if total_steps else 0
+
         return ComparisonResult(
-            replay_session_id=str(replay_session_id),
-            match_percentage=95.5,
-            total_steps=10,
-            matching_steps=9,
-            divergent_steps=[
-                {
-                    "step_id": "step5",
-                    "reason": "Non-deterministic external API call",
-                    "original_output_hash": "abc123",
-                    "replay_output_hash": "def456",
-                }
-            ],
-            status="completed"
+            replay_session_id=str(replay.id),
+            match_percentage=match_pct,
+            total_steps=total_steps,
+            matching_steps=int(matching_steps),
+            divergent_steps=divergent_steps,
+            status=replay.status,
         )
 
     except Exception as e:

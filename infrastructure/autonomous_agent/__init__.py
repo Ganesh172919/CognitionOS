@@ -25,6 +25,26 @@ from .agent_orchestrator import (
     HallucinationDetector,
     SafetyBoundaries
 )
+from .self_evaluator import (
+    SelfEvaluator,
+    EvaluationResult,
+    QualityDimension,
+    EvaluationVerdict,
+)
+from .context_manager import (
+    ContextManager,
+    ContextMessage,
+    MessageRole,
+    MessagePriority,
+    CompressionResult,
+)
+from .validation_pipeline import (
+    ValidationPipeline,
+    PipelineResult,
+    ValidationStage,
+    ValidationSeverity,
+    ValidationIssue,
+)
 
 __all__ = [
     # Planning
@@ -46,4 +66,22 @@ __all__ = [
     "AgentMemory",
     "HallucinationDetector",
     "SafetyBoundaries",
+    # Self-Evaluation
+    "SelfEvaluator",
+    "EvaluationResult",
+    "QualityDimension",
+    "EvaluationVerdict",
+    # Context Management
+    "ContextManager",
+    "ContextMessage",
+    "MessageRole",
+    "MessagePriority",
+    "CompressionResult",
+    # Validation Pipeline
+    "ValidationPipeline",
+    "PipelineResult",
+    "ValidationStage",
+    "ValidationSeverity",
+    "ValidationIssue",
 ]
+

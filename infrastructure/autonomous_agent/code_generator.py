@@ -438,7 +438,7 @@ This module implements: {purpose}
                     if not node.name.startswith('_'):  # Skip private functions
                         functions.append(node.name)
             return functions
-        except:
+        except Exception:
             return []
 
     async def validate_code(self, generated: GeneratedCode) -> ValidationResult:
@@ -527,7 +527,7 @@ This module implements: {purpose}
                 tree = ast.parse(code)
                 metrics["functions"] = len([n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)])
                 metrics["classes"] = len([n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)])
-            except:
+            except Exception:
                 pass
 
         return metrics

@@ -1,19 +1,11 @@
-"""Plugin Marketplace Infrastructure"""
+"""
+Plugin Marketplace Infrastructure
 
-from infrastructure.plugin_marketplace.marketplace import (
-    PluginMarketplace,
-    Plugin,
-    PluginReview,
-    PluginInstallation,
-    PluginCategory,
-    PluginStatus
-)
+Registry, catalog, and install flow for plugins.
+"""
 
-__all__ = [
-    "PluginMarketplace",
-    "Plugin",
-    "PluginReview",
-    "PluginInstallation",
-    "PluginCategory",
-    "PluginStatus"
-]
+from infrastructure.plugin_marketplace.registry import PluginRegistry
+from infrastructure.plugin_marketplace.catalog import PluginCatalog
+from infrastructure.plugin_marketplace.install_flow import PluginInstallFlow
+
+__all__ = ["PluginRegistry", "PluginCatalog", "PluginInstallFlow"]

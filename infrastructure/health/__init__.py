@@ -1,6 +1,5 @@
 """
 Health Check Infrastructure
-
 System health checks for dependencies.
 """
 
@@ -12,6 +11,11 @@ from infrastructure.health.checks import (
     DatabaseHealthCheck,
     SystemHealthAggregator,
 )
+from infrastructure.health.health_aggregator import (
+    HealthCheckAggregator,
+    AggregatedHealth,
+    ProbeType,
+)
 
 __all__ = [
     "HealthStatus",
@@ -20,4 +24,8 @@ __all__ = [
     "RabbitMQHealthCheck",
     "DatabaseHealthCheck",
     "SystemHealthAggregator",
+    "HealthCheckAggregator",
+    "AggregatedHealth",
+    "ProbeType",
 ]
+

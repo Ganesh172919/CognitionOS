@@ -80,6 +80,7 @@ Thumbs.db
 
 # Node modules (for any frontend work)
 node_modules/
+.next/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
