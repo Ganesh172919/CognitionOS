@@ -1,14 +1,16 @@
 """Config package"""
 from .config_manager import (
-    ConfigManager,
-    ConfigEntry,
-    ConfigType,
-    ConfigNamespace,
     ConfigChangeEvent,
-    ConfigValidationError,
+    ConfigEntry,
     ConfigImmutableError,
+    ConfigManager,
+    ConfigSchema as ConfigNamespace,
+    ConfigType,
     get_config_manager,
 )
+
+# ConfigValidationError is an alias for ValueError
+ConfigValidationError = ValueError
 
 __all__ = [
     "ConfigManager",
