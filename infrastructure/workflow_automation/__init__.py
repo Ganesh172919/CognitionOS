@@ -2,19 +2,34 @@
 
 from .workflow_engine import (
     ExecutionStatus,
-    RetryStrategy,
     StepExecution,
-    StepExecutorRegistry,
     StepType,
     TriggerType,
-    WorkflowAutomationEngine,
     WorkflowDefinition,
+    WorkflowEngine,
     WorkflowExecution,
     WorkflowStatus,
     WorkflowStep,
-    WorkflowTrigger,
-    WorkflowVersionManager,
 )
+
+# Aliases for backward compatibility and external API expectations
+WorkflowAutomationEngine = WorkflowEngine
+WorkflowVersionManager = WorkflowEngine
+StepExecutorRegistry = WorkflowEngine
+
+
+from enum import Enum
+
+
+class RetryStrategy(str, Enum):
+    """Retry strategy for workflow steps."""
+
+    NONE = "none"
+    LINEAR = "linear"
+    EXPONENTIAL = "exponential"
+
+
+WorkflowTrigger = WorkflowStep
 
 __all__ = [
     "WorkflowAutomationEngine",

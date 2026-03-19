@@ -59,7 +59,7 @@ from core.domain.billing.services import (
     UsageMeteringService,
     EntitlementService,
 )
-from infrastructure.events.event_bus import InMemoryEventBus
+from infrastructure.events.event_bus import EventBus as InMemoryEventBus
 
 
 # Configuration

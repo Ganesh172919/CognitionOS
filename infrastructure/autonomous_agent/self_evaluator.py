@@ -532,6 +532,11 @@ class SelfEvaluator:
         # Run all analyzers
         scores: Dict[QualityDimension, DimensionScore] = {}
         scores[QualityDimension.CORRECTNESS] = self._correctness.analyze(code, language)
+
+        # If there is a syntax error (very low correctness score), other dimensions
+        # cannot be meaningfully evaluated — cap composite accordingly.
+        has_syntax_error = scores[QualityDimension.CORRECTNESS].score < 15
+
         scores[QualityDimension.COMPLETENESS] = self._completeness.analyze(
             code, requirements or [], language
         )
@@ -544,6 +549,10 @@ class SelfEvaluator:
         for dim, weight in self._weights.items():
             if dim in scores:
                 composite += scores[dim].score * weight
+
+        # Syntax errors make all other quality dimensions moot — cap at 40
+        if has_syntax_error:
+            composite = min(composite, 40.0)
 
         # Determine verdict
         verdict = EvaluationVerdict.REJECT

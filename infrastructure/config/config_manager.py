@@ -12,6 +12,7 @@ Features:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -20,6 +21,7 @@ import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
 
@@ -34,6 +36,38 @@ T = TypeVar("T")
 _UNSET = object()
 
 # ---------------------------------------------------------------------------
+# Config type and errors
+# ---------------------------------------------------------------------------
+
+
+class ConfigType(str, Enum):
+    STRING = "string"
+    INTEGER = "integer"
+    FLOAT = "float"
+    BOOLEAN = "boolean"
+    LIST = "list"
+    DICT = "dict"
+    SECRET = "secret"
+
+
+class ConfigImmutableError(Exception):
+    """Raised when attempting to modify an immutable config key."""
+
+
+# ---------------------------------------------------------------------------
+# Change event
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ConfigChangeEvent:
+    key: str
+    old_value: Any
+    new_value: Any
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# ---------------------------------------------------------------------------
 # Config value metadata
 # ---------------------------------------------------------------------------
 
@@ -45,8 +79,19 @@ class ConfigEntry:
     source: str  # "default", "env_file", "env_var", "override", "remote"
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     is_secret: bool = False
+    is_immutable: bool = False
     description: str = ""
+    config_type: Optional[ConfigType] = None
     validator: Optional[Callable[[Any], bool]] = None
+
+    @property
+    def masked_value(self) -> str:
+        if not self.is_secret:
+            return str(self.value)
+        raw = str(self.value)
+        if len(raw) <= 4:
+            return "***"
+        return raw[:2] + "***" + raw[-2:]
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +136,40 @@ class ConfigSchema:
 
 
 # ---------------------------------------------------------------------------
+# Namespace view
+# ---------------------------------------------------------------------------
+
+
+class _NamespaceView:
+    """Read/write view over a dotted-key prefix."""
+
+    def __init__(self, manager: "ConfigManager", prefix: str) -> None:
+        self._manager = manager
+        self._prefix = prefix
+
+    def _full_key(self, key: str) -> str:
+        return f"{self._prefix}.{key}"
+
+    def get(self, key: str, default: Any = _UNSET) -> Any:
+        return self._manager.get(self._full_key(key), default)
+
+    def get_int(self, key: str, default: int = 0) -> int:
+        return self._manager.get_int(self._full_key(key), default)
+
+    def get_float(self, key: str, default: float = 0.0) -> float:
+        return self._manager.get_float(self._full_key(key), default)
+
+    def get_bool(self, key: str, default: bool = False) -> bool:
+        return self._manager.get_bool(self._full_key(key), default)
+
+    def get_str(self, key: str, default: str = "") -> str:
+        return self._manager.get_str(self._full_key(key), default)
+
+    def set(self, key: str, value: Any, **kwargs: Any) -> None:
+        self._manager.set(self._full_key(key), value, **kwargs)
+
+
+# ---------------------------------------------------------------------------
 # Configuration Manager
 # ---------------------------------------------------------------------------
 
@@ -108,13 +187,16 @@ class ConfigManager:
         env_prefix: str = "COGNITIONOS_",
         env_file: Optional[str] = None,
         schema: Optional[ConfigSchema] = None,
+        environment: str = "production",
     ) -> None:
         self._lock = threading.RLock()
         self._entries: Dict[str, ConfigEntry] = {}
-        self._change_callbacks: List[Callable[[str, Any, Any], None]] = []
+        self._change_callbacks: List[tuple] = []  # (key_pattern: str, callback: Callable)
         self._env_prefix = env_prefix
         self._schema = schema
         self._namespace_overrides: Dict[str, Dict[str, Any]] = {}
+        self._change_history: Dict[str, List[ConfigChangeEvent]] = {}
+        self._environment = environment
 
         # Layer 1: env file (if provided)
         if env_file:
@@ -173,23 +255,67 @@ class ConfigManager:
 
     # ----- internal set -----
 
-    def _set_internal(self, key: str, value: Any, source: str) -> None:
-        is_secret = bool(self.SECRET_PATTERNS.search(key))
+    def _is_secret_key(self, key: str) -> bool:
+        """Return True if key name matches secret patterns."""
+        return bool(self.SECRET_PATTERNS.search(key))
+
+    def _set_internal(
+        self,
+        key: str,
+        value: Any,
+        source: str,
+        *,
+        is_secret: Optional[bool] = None,
+        is_immutable: bool = False,
+        config_type: Optional[ConfigType] = None,
+    ) -> None:
+        secret = is_secret if is_secret is not None else self._is_secret_key(key)
         with self._lock:
-            old = self._entries.get(key)
-            old_value = old.value if old else _UNSET
-            self._entries[key] = ConfigEntry(key=key, value=value, source=source, is_secret=is_secret)
-            if old_value is not _UNSET and old_value != value:
-                for cb in self._change_callbacks:
+            old_entry = self._entries.get(key)
+            if old_entry is not None and old_entry.is_immutable:
+                raise ConfigImmutableError(f"Config key '{key}' is immutable and cannot be changed.")
+            old_value = old_entry.value if old_entry else None
+            self._entries[key] = ConfigEntry(
+                key=key,
+                value=value,
+                source=source,
+                is_secret=secret,
+                is_immutable=is_immutable,
+                config_type=config_type,
+            )
+            event = ConfigChangeEvent(key=key, old_value=old_value, new_value=value)
+            # Record history
+            if key not in self._change_history:
+                self._change_history[key] = []
+            self._change_history[key].append(event)
+            # Fire callbacks
+            for pattern, cb in self._change_callbacks:
+                if pattern == "*" or pattern == key:
                     try:
-                        cb(key, old_value, value)
+                        cb(event)
                     except Exception:
                         logger.exception("Config change callback error for key %s", key)
 
     # ----- public API -----
 
-    def set(self, key: str, value: Any, *, source: str = "override") -> None:
-        self._set_internal(key, value, source)
+    def set(
+        self,
+        key: str,
+        value: Any,
+        *,
+        source: str = "override",
+        secret: bool = False,
+        immutable: bool = False,
+        config_type: Optional[ConfigType] = None,
+    ) -> None:
+        self._set_internal(
+            key,
+            value,
+            source,
+            is_secret=secret or self._is_secret_key(key),
+            is_immutable=immutable,
+            config_type=config_type,
+        )
 
     def get(self, key: str, default: Any = _UNSET, *, cast: Optional[Type[T]] = None) -> Any:
         with self._lock:
@@ -231,6 +357,10 @@ class ConfigManager:
             return val
         return default or []
 
+    def namespace(self, prefix: str) -> "_NamespaceView":
+        """Return a namespace view for the given dotted-key prefix."""
+        return _NamespaceView(self, prefix)
+
     # ----- namespace isolation (multi-tenant) -----
 
     def set_namespace(self, namespace: str, overrides: Dict[str, Any]) -> None:
@@ -238,6 +368,17 @@ class ConfigManager:
 
     def get_namespaced(self, namespace: str, key: str, default: Any = _UNSET) -> Any:
         ns = self._namespace_overrides.get(namespace, {})
+        if key in ns:
+            return ns[key]
+        return self.get(key, default)
+
+    def set_tenant_override(self, tenant_id: str, key: str, value: Any) -> None:
+        if tenant_id not in self._namespace_overrides:
+            self._namespace_overrides[tenant_id] = {}
+        self._namespace_overrides[tenant_id][key] = value
+
+    def get_for_tenant(self, tenant_id: str, key: str, default: Any = _UNSET) -> Any:
+        ns = self._namespace_overrides.get(tenant_id, {})
         if key in ns:
             return ns[key]
         return self.get(key, default)
@@ -252,8 +393,65 @@ class ConfigManager:
 
     # ----- change notification -----
 
-    def on_change(self, callback: Callable[[str, Any, Any], None]) -> None:
-        self._change_callbacks.append(callback)
+    def on_change(self, key_or_callback: Any, callback: Optional[Callable] = None) -> None:
+        """Register a change listener.
+
+        Can be called as:
+          cfg.on_change(callback)                  # legacy — fires for every key
+          cfg.on_change("some.key", callback)       # fires only for that key
+          cfg.on_change("*", callback)              # fires for every key
+        """
+        if callback is None:
+            # Legacy single-argument form: on_change(callback)
+            self._change_callbacks.append(("*", key_or_callback))
+        else:
+            self._change_callbacks.append((key_or_callback, callback))
+
+    # ----- change history -----
+
+    def get_change_history(self, key: str) -> List[ConfigChangeEvent]:
+        return list(self._change_history.get(key, []))
+
+    # ----- checksum -----
+
+    def checksum(self) -> str:
+        with self._lock:
+            flat = {k: str(e.value) for k, e in self._entries.items()}
+        serialized = json.dumps(flat, sort_keys=True)
+        return hashlib.sha256(serialized.encode()).hexdigest()
+
+    # ----- snapshot -----
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            config = self.to_dict(include_secrets=False)
+        return {
+            "environment": self._environment,
+            "total_keys": len(config),
+            "config": config,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    # ----- defaults and bulk load -----
+
+    def load_defaults(self, defaults: Dict[str, Any], *, prefix: str = "") -> None:
+        """Load a nested dict of defaults, flattening keys with dot notation."""
+        for k, v in defaults.items():
+            full_key = f"{prefix}.{k}" if prefix else k
+            if isinstance(v, dict):
+                self.load_defaults(v, prefix=full_key)
+            else:
+                if full_key not in self._entries:
+                    self._set_internal(full_key, v, "default")
+
+    def set_defaults(self, defaults: Dict[str, Any]) -> None:
+        for key, value in defaults.items():
+            if key not in self._entries:
+                self._set_internal(key, value, "default")
+
+    def merge(self, other: Dict[str, Any], *, source: str = "merge") -> None:
+        for key, value in other.items():
+            self._set_internal(key, value, source)
 
     # ----- export -----
 
@@ -270,17 +468,6 @@ class ConfigManager:
     def to_sources_dict(self) -> Dict[str, str]:
         with self._lock:
             return {key: entry.source for key, entry in self._entries.items()}
-
-    # ----- bulk set -----
-
-    def set_defaults(self, defaults: Dict[str, Any]) -> None:
-        for key, value in defaults.items():
-            if key not in self._entries:
-                self._set_internal(key, value, "default")
-
-    def merge(self, other: Dict[str, Any], *, source: str = "merge") -> None:
-        for key, value in other.items():
-            self._set_internal(key, value, source)
 
     # ----- hot reload -----
 

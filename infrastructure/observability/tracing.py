@@ -7,11 +7,42 @@ Provides distributed tracing for CognitionOS V3 with automatic instrumentation.
 import os
 from typing import Optional
 from contextlib import contextmanager
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.resources import Resource
+
+    try:
+        from opentelemetry.exporter.jaeger.thrift import JaegerExporter as _JaegerExporter
+
+        _JAEGER_AVAILABLE = True
+    except Exception:
+        _JaegerExporter = None  # type: ignore[assignment,misc]
+        _JAEGER_AVAILABLE = False
+
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+    _JAEGER_AVAILABLE = False
+
+    class _FakeTrace:  # type: ignore[misc]
+        class Tracer:
+            pass
+
+        @staticmethod
+        def get_tracer(name: str):
+            return _FakeTrace.Tracer()
+
+        @staticmethod
+        def get_current_span():
+            return None
+
+        @staticmethod
+        def set_tracer_provider(provider):
+            pass
+
+    trace = _FakeTrace  # type: ignore[assignment]
 
 from core.config import get_config
 from infrastructure.observability import get_logger
@@ -25,45 +56,48 @@ config = get_config()
 _tracer: Optional[trace.Tracer] = None
 
 
-def setup_tracing(service_name: Optional[str] = None) -> trace.Tracer:
+def setup_tracing(service_name: Optional[str] = None) -> "trace.Tracer":
     """
     Setup OpenTelemetry tracing.
-    
+
     Args:
         service_name: Optional service name override
-        
+
     Returns:
         Configured tracer instance
     """
     global _tracer
-    
-    if not config.observability.enable_tracing:
+
+    if not _OTEL_AVAILABLE or not config.observability.enable_tracing:
         logger.info("Tracing is disabled")
         return trace.get_tracer(__name__)
-    
+
     # Create resource with service information
-    resource = Resource.create({
-        "service.name": service_name or config.service_name,
-        "service.version": config.service_version,
-        "deployment.environment": config.environment,
-    })
-    
+    resource = Resource.create(
+        {
+            "service.name": service_name or config.service_name,
+            "service.version": config.service_version,
+            "deployment.environment": config.environment,
+        }
+    )
+
     # Create tracer provider
     tracer_provider = TracerProvider(resource=resource)
-    
-    # Configure Jaeger exporter
-    jaeger_exporter = JaegerExporter(
-        agent_host_name=config.observability.jaeger_host,
-        agent_port=config.observability.jaeger_port,
-    )
-    
-    # Add span processor
-    span_processor = BatchSpanProcessor(jaeger_exporter)
-    tracer_provider.add_span_processor(span_processor)
-    
+
+    # Configure Jaeger exporter if available
+    if _JAEGER_AVAILABLE:
+        jaeger_exporter = _JaegerExporter(
+            agent_host_name=config.observability.jaeger_host,
+            agent_port=config.observability.jaeger_port,
+        )
+        span_processor = BatchSpanProcessor(jaeger_exporter)
+        tracer_provider.add_span_processor(span_processor)
+    else:
+        logger.warning("Jaeger exporter not available; spans will not be exported")
+
     # Set global tracer provider
     trace.set_tracer_provider(tracer_provider)
-    
+
     # Get tracer instance
     _tracer = trace.get_tracer(__name__)
     
