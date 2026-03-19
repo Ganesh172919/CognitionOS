@@ -191,7 +191,7 @@ class ConfigManager:
     ) -> None:
         self._lock = threading.RLock()
         self._entries: Dict[str, ConfigEntry] = {}
-        self._change_callbacks: List[tuple] = []  # (key_pattern, callback)
+        self._change_callbacks: List[tuple] = []  # (key_pattern: str, callback: Callable)
         self._env_prefix = env_prefix
         self._schema = schema
         self._namespace_overrides: Dict[str, Dict[str, Any]] = {}
@@ -255,6 +255,10 @@ class ConfigManager:
 
     # ----- internal set -----
 
+    def _is_secret_key(self, key: str) -> bool:
+        """Return True if key name matches secret patterns."""
+        return bool(self.SECRET_PATTERNS.search(key))
+
     def _set_internal(
         self,
         key: str,
@@ -265,8 +269,7 @@ class ConfigManager:
         is_immutable: bool = False,
         config_type: Optional[ConfigType] = None,
     ) -> None:
-        auto_secret = bool(self.SECRET_PATTERNS.search(key))
-        secret = is_secret if is_secret is not None else auto_secret
+        secret = is_secret if is_secret is not None else self._is_secret_key(key)
         with self._lock:
             old_entry = self._entries.get(key)
             if old_entry is not None and old_entry.is_immutable:
@@ -309,7 +312,7 @@ class ConfigManager:
             key,
             value,
             source,
-            is_secret=secret or bool(self.SECRET_PATTERNS.search(key)),
+            is_secret=secret or self._is_secret_key(key),
             is_immutable=immutable,
             config_type=config_type,
         )

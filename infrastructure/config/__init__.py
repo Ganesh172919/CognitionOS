@@ -9,8 +9,10 @@ from .config_manager import (
     get_config_manager,
 )
 
-# ConfigValidationError is an alias for ValueError
-ConfigValidationError = ValueError
+
+class ConfigValidationError(ValueError):
+    """Raised when configuration validation fails."""
+
 
 __all__ = [
     "ConfigManager",

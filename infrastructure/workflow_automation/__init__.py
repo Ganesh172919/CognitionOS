@@ -18,8 +18,11 @@ WorkflowVersionManager = WorkflowEngine
 StepExecutorRegistry = WorkflowEngine
 
 
-class RetryStrategy:
-    """Simple retry strategy configuration."""
+from enum import Enum
+
+
+class RetryStrategy(str, Enum):
+    """Retry strategy for workflow steps."""
 
     NONE = "none"
     LINEAR = "linear"
