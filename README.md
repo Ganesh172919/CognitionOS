@@ -70,80 +70,75 @@ CognitionOS transforms natural language goals into autonomous execution through:
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- OpenAI or Anthropic API key (for AI features)
+| Requirement | Version | Purpose |
+|---|---|---|
+| Docker | 20.10+ | Runs PostgreSQL, Redis, RabbitMQ, API |
+| Docker Compose | v2+ (`docker compose`) | Orchestrates all services |
+| *(Optional)* Node.js | 18+ | Runs the Next.js frontend dashboard |
+| *(Optional)* OpenAI / Anthropic key | — | Powers AI-backed endpoints |
 
-### Option 1: Quick Start (Recommended)
+> AI features degrade gracefully when no LLM keys are set — the API itself starts
+> and all non-AI endpoints work without keys.
 
-```bash
-# Clone repository
-git clone https://github.com/Ganesh172919/CognitionOS.git
-cd CognitionOS
-
-# Run quick start script
-./scripts/quickstart.sh
-```
-
-### Option 2: Localhost Setup
-
-**Windows (PowerShell):**
-```powershell
-# Clone repository
-git clone https://github.com/Ganesh172919/CognitionOS.git
-cd CognitionOS
-
-# Run localhost stack (creates .env from .env.localhost, starts Docker, runs migrations)
-.\LOCAL_RUNBOOK.ps1
-
-# Start frontend dashboard
-cd frontend; npm install; npm run dev
-# Open http://localhost:3000
-```
-
-**Unix (Bash):**
-```bash
-# Clone repository
-git clone https://github.com/Ganesh172919/CognitionOS.git
-cd CognitionOS
-
-# Run localhost setup script
-./scripts/setup-localhost.sh
-```
-
-This will:
-- Copy `.env.localhost` to `.env` if `.env` does not exist
-- Start PostgreSQL, Redis, RabbitMQ via `docker-compose.local.yml`
-- Run database migrations (`database/run_migrations.py`)
-- Start the API on port 8100
-
-**Frontend:** Set `NEXT_PUBLIC_API_URL=http://localhost:8100` in `frontend/.env.local` (see `frontend/.env.local.example`) so the dashboard uses the main API for localhost.
-
-### Option 3: Manual Setup
+### One-command setup (recommended)
 
 ```bash
-# Clone repository
 git clone https://github.com/Ganesh172919/CognitionOS.git
 cd CognitionOS
+chmod +x run_locally.sh
+./run_locally.sh
+```
 
-# Set up environment (for Docker: use postgres/redis/rabbitmq as DB_HOST/REDIS_HOST/RABBITMQ_HOST)
-cp .env.example .env
-# Or for localhost: cp .env.localhost .env
-# Edit .env with your API keys. DATABASE_URL is optional (built from DB_* if unset).
+`run_locally.sh` will:
+1. Copy `.env.localhost` → `.env` (if `.env` doesn't already exist)
+2. Pull & start PostgreSQL, Redis and RabbitMQ via `docker-compose.local.yml`
+3. Wait for each service to report healthy
+4. Build & start the CognitionOS API on **port 8100** (with hot-reload)
+5. Run database migrations automatically inside the API container
+6. *(If Node.js is present)* install frontend deps and start the Next.js dashboard on **port 3000**
 
-# Start localhost stack (Postgres, Redis, RabbitMQ, API)
+**Management commands**
+
+```bash
+./run_locally.sh --status   # Show running containers
+./run_locally.sh --logs     # Tail all container logs
+./run_locally.sh --stop     # Stop all containers
+./run_locally.sh --clean    # Remove containers + volumes (resets DB)
+```
+
+### Configure LLM keys (optional)
+
+Edit `.env` and set your keys before (or after) starting:
+
+```bash
+LLM_OPENAI_API_KEY=sk-your-real-openai-key
+LLM_ANTHROPIC_API_KEY=sk-ant-your-real-anthropic-key
+```
+
+Then restart the API:
+
+```bash
+docker compose -f docker-compose.local.yml restart api
+```
+
+### Manual Docker Compose setup
+
+```bash
+cp .env.localhost .env          # pre-configured for localhost
 docker compose -f docker-compose.local.yml up -d
-
-# Check health
-curl http://localhost:8100/health
-curl http://localhost:8100/api/v3/dashboard
-curl http://localhost:8100/api/v3/health/live
 ```
 
-### Test the System (V3 API)
+### Test the API
 
 ```bash
+# Health check
+curl http://localhost:8100/health
+
+# Liveness probe
+curl http://localhost:8100/api/v3/health/live
+
 # Create a workflow
-curl -X POST http://localhost:8100/api/v3/workflows \
+curl -s -X POST http://localhost:8100/api/v3/workflows \
   -H "Content-Type: application/json" \
   -d '{
     "workflow_id": "test-workflow",
@@ -159,13 +154,14 @@ curl -X POST http://localhost:8100/api/v3/workflows \
         "depends_on": []
       }
     ]
-  }'
+  }' | python3 -m json.tool
 
 # List workflows
 curl http://localhost:8100/api/v3/workflows
 
-# View API documentation
-open http://localhost:8100/docs
+# Interactive API docs
+open http://localhost:8100/docs    # macOS
+xdg-open http://localhost:8100/docs  # Linux
 ```
 
 ## 📚 Documentation
@@ -249,7 +245,7 @@ GET /api/v3/executions/health
 - Output comparison for debugging
 - Distributed execution locks
 
-See [P0 Implementation Complete](P0_IMPLEMENTATION_COMPLETE.md) for full details.
+See [Phase 3 Complete Summary](docs/v3/PHASE_3_COMPLETION_SUMMARY.md) for full details.
 
 ### 1. Task Planning with DAG
 
@@ -401,32 +397,32 @@ See [Security Documentation](docs/security.md) for details.
 
 ## 🧪 Testing
 
-**Current Test Coverage**:
-- **Total Test Files**: 35 files
-- **Total Tests**: 240+ tests
-- **Passing Tests**: 186 tests
-- **Test Types**: Unit, Integration, and E2E tests
-
 ```bash
-# Run unit tests
-pytest services/*/tests/
+# Install test dependencies (first time)
+pip install -r requirements.txt
 
-# Run integration tests
-pytest tests/integration/
+# Run all unit tests
+pytest tests/unit/ -v
 
-# Run P0 deterministic execution tests
-pytest tests/integration/test_p0_deterministic_execution.py
+# Run integration tests (requires a running API + DB)
+pytest tests/integration/ -v
 
-# Load testing
-k6 run tests/load/basic-scenario.js
+# Run the full test suite
+pytest tests/ -v --tb=short
+
+# Run with coverage report
+pytest tests/ --cov=services --cov=core --cov-report=term-missing
 ```
 
-**Test Coverage Includes**:
+> Integration tests connect to a live database and Redis. Start the infrastructure
+> first with `./run_locally.sh` (or `docker compose -f docker-compose.local.yml up -d postgres redis rabbitmq`).
+
+**Test coverage includes:**
 - V3 Clean Architecture (workflows, agents, memory)
 - P0 Execution Persistence (replay, resume, idempotency)
 - LLM provider abstractions
 - Database migrations
-- API endpoints
+- API endpoints (auth, cost, health, checkpoints)
 
 ## 🌟 Example Use Case
 
@@ -579,23 +575,6 @@ See `SECURITY.md` for complete threat model and security practices.
 - System health metrics
 - Alert monitoring
 - Failure tracking
-
-## 🧪 Testing
-
-Comprehensive test suite covering all phases:
-
-```bash
-# Run all tests
-pytest tests/
-
-# Integration tests
-pytest tests/integration/test_integration.py -v
-
-# Specific service tests
-pytest tests/services/ai-runtime/ -v
-```
-
-**Test Coverage**: 75%+ across all services
 
 ## 📈 Status
 

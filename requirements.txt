@@ -73,6 +73,12 @@ mypy==1.8.0
 bandit==1.7.6
 safety>=2.4.0
 
+# Scientific / ML (used by analytics and intelligence modules)
+numpy>=1.26.0
+pandas>=2.1.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+
 # Utilities
 python-dateutil==2.8.2
 pytz==2023.3
