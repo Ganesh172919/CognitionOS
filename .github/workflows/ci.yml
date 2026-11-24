@@ -5,6 +5,7 @@ on:
     branches: [ main, develop, 'copilot/*' ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.12'
@@ -26,7 +27,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install black isort pylint mypy
-          pip install -r services/api/requirements.txt
+          pip install -r requirements.txt
       
       - name: Run Black
         run: black --check core infrastructure services shared tests || true
@@ -58,7 +59,7 @@ jobs:
       
       - name: Run Safety check
         run: |
-          pip install -r services/api/requirements.txt
+          pip install -r requirements.txt
           safety check --json || true
         continue-on-error: true
       
@@ -124,7 +125,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r services/api/requirements.txt
+          pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov pytest-mock httpx email-validator
       
       - name: Run Unit Tests
@@ -219,7 +220,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r services/api/requirements.txt
+          pip install -r requirements.txt
           pip install -e .
 
       - name: Run migrations
